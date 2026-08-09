@@ -1,0 +1,37 @@
+{
+  "name": "apivault-cli",
+  "version": "0.1.0",
+  "description": "Command-line client for an ApiVault instance. Manage your encrypted API keys from the terminal.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "apivault": "dist/cli.js"
+  },
+  "main": "dist/cli.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.2.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^12.1.0",
+    "open": "^10.1.0",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
