@@ -1,14 +1,23 @@
 import { API_BASE_URL, readToken } from "./config";
 
-/** Error wrapper carrying the HTTP status and parsed body. */
+/** Error wrapper carrying the HTTP status, parsed body, and machine code. */
 export class ApiError extends Error {
   status: number;
   body: unknown;
+  /** Stable machine code from the server body (e.g. "VAULT_KEY_REQUIRED"). */
+  code?: string;
   constructor(message: string, status: number, body: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.body = body;
+    if (
+      body &&
+      typeof body === "object" &&
+      typeof (body as { code?: unknown }).code === "string"
+    ) {
+      this.code = (body as { code: string }).code;
+    }
   }
 }
 
@@ -20,6 +29,8 @@ export interface RequestOpts {
   token?: string;
   /** Send the request without a Bearer token (for /api/cli/request & /status). */
   noAuth?: boolean;
+  /** Extra headers (e.g. X-Vault-Key for custom-mode decrypts). */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -37,7 +48,7 @@ export class ApiClient {
   /** Issue a request. */
   async request<T = unknown>(path: string, opts: RequestOpts = {}): Promise<T> {
     const url = this.absolute(path);
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = { Accept: "application/json", ...opts.headers };
 
     if (opts.json !== undefined) {
       headers["Content-Type"] = "application/json";

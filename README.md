@@ -72,6 +72,23 @@ apivault keys delete <id>          # confirm, then delete
 apivault keys delete <id> -f       # skip the confirmation prompt
 ```
 
+#### Custom encryption key
+
+If you've set a **custom vault key** on the website (Settings → Encryption Key),
+revealing a raw value requires that passphrase:
+
+```bash
+apivault keys get <id> --reveal --key "your passphrase"
+# or:
+APIVAULT_KEY="your passphrase" apivault keys get <id> --reveal
+# or just: apivault keys get <id> --reveal   (you'll be prompted)
+```
+
+Accounts using the **default** encryption need no passphrase — `--reveal` works
+with just the connected token. You can't reveal a custom-mode key without the
+passphrase; if you've forgotten it, the stored keys cannot be recovered (only
+reset by deleting them on the website).
+
 ### Scripting
 
 Add `--json` to any command for machine-readable output:

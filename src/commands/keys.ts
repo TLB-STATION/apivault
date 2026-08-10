@@ -28,6 +28,8 @@ interface KeyOpts extends GlobalOptions {
   json?: boolean;
   reveal?: boolean;
   force?: boolean;
+  /** Custom vault passphrase (for reveal on custom-mode accounts). */
+  key?: string;
 }
 
 /** Fields `keys add` accepts as flags (enables non-interactive use). */
@@ -67,14 +69,7 @@ async function getKey(id: string, opts: KeyOpts): Promise<void> {
 
   let rawKey: string | undefined;
   if (opts.reveal) {
-    const decrypted = await c.request<{ rawKey?: string; error?: string }>(
-      `/api/keys/${encodeURIComponent(id)}/decrypt`,
-      { method: "POST" },
-    );
-    if (!decrypted?.rawKey) {
-      throw new ApiError("Could not decrypt that key.", 500, decrypted);
-    }
-    rawKey = decrypted.rawKey;
+    rawKey = await revealKey(c, id, opts.key);
   }
 
   if (opts.json) {
@@ -87,6 +82,49 @@ async function getKey(id: string, opts: KeyOpts): Promise<void> {
     process.stdout.write(
       yellow("⚠ ") + "This is a secret. Avoid sharing or pasting it anywhere untrusted.\n",
     );
+  }
+}
+
+/**
+ * Decrypt a key. Default-mode accounts work with just the Bearer token.
+ * Custom-mode accounts need the vault passphrase, resolved from (in order):
+ * the --key flag, the APIVAULT_KEY env var, or an interactive hidden prompt
+ * that only fires when the server reports VAULT_KEY_REQUIRED.
+ */
+async function revealKey(
+  c: typeof client,
+  id: string,
+  keyFlag?: string,
+): Promise<string> {
+  const vaultKey = (keyFlag ?? process.env.APIVAULT_KEY)?.trim();
+
+  const tryDecrypt = async (passphrase?: string) => {
+    const headers: Record<string, string> = {};
+    if (passphrase) headers["X-Vault-Key"] = passphrase;
+    return c.request<{ rawKey?: string; error?: string }>(
+      `/api/keys/${encodeURIComponent(id)}/decrypt`,
+      { method: "POST", headers },
+    );
+  };
+
+  try {
+    const decrypted = await tryDecrypt(vaultKey);
+    if (!decrypted?.rawKey) throw new ApiError("Could not decrypt that key.", 500, decrypted);
+    return decrypted.rawKey;
+  } catch (err) {
+    if (err instanceof ApiError && err.code === "VAULT_KEY_REQUIRED") {
+      // Custom mode and no usable passphrase yet — prompt (unless one was
+      // already provided and rejected, in which case surface the error).
+      if (vaultKey) throw new ApiError("That vault key is incorrect.", 403, undefined);
+      const passphrase = (await password({
+        message: "Vault key (custom encryption passphrase):",
+        mask: "*",
+      })).trim();
+      const decrypted = await tryDecrypt(passphrase);
+      if (!decrypted?.rawKey) throw new ApiError("Could not decrypt that key.", 500, decrypted);
+      return decrypted.rawKey;
+    }
+    throw err;
   }
 }
 
@@ -253,8 +291,9 @@ export function registerKeysCommand(program: Command): void {
     .command("get <id>")
     .description("Show a key. Use --reveal to decrypt and print the raw value.")
     .option("--reveal", "Decrypt and print the raw key value")
-    .action(async (id: string, local: { reveal?: boolean }) =>
-      getKey(id, { ...globals(), reveal: local.reveal }).catch(handle),
+    .option("--key <passphrase>", "Vault key for custom-mode accounts (or set APIVAULT_KEY)")
+    .action(async (id: string, local: { reveal?: boolean; key?: string }) =>
+      getKey(id, { ...globals(), reveal: local.reveal, key: local.key }).catch(handle),
     );
 
   keys
