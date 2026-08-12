@@ -1,0 +1,132 @@
+import spawn from "cross-spawn";
+import { Command } from "commander";
+import { client } from "../http";
+import { revealKey, type ApiKeyDTO } from "./keys";
+import { getConfigValue } from "../config";
+import { green, dim, yellow, reportError } from "../ui/format";
+
+interface RunOpts {
+  /** Environment to load secrets from. Falls back to config `run.env`. */
+  env?: string;
+  /** Vault passphrase for custom-mode accounts (same as --key on keys get). */
+  key?: string;
+}
+
+/**
+ * Split a command string into tokens, respecting double-quoted segments so
+ * `npm run "my build"` splits as ["npm", "run", "my build"].
+ */
+function splitCommand(cmd: string): string[] {
+  const matches = cmd.match(/(?:[^\s"]+|"[^"]*")+/g);
+  if (!matches) return [];
+  return matches.map((s) => s.replace(/^"|"$/g, ""));
+}
+
+/**
+ * apivault run [--env <env>] [--key <passphrase>] [-- <command> [args...]]
+ *
+ * Env and command resolve with explicit flags first, then fall back to the
+ * local config (`run.env`, `run.command`). Loads all secrets for the env,
+ * injects them into process.env, and spawns the command.
+ */
+async function runCommand(opts: RunOpts, commandAndArgs: string[]): Promise<void> {
+  // --- Resolve environment: --env flag → config run.env → error.
+  const env = (opts.env ?? getConfigValue("run.env"))?.trim();
+  if (!env) {
+    throw new Error(
+      "No environment specified. Pass --env <env>, or set a default with `apivault config set run.env <env>`.",
+    );
+  }
+
+  // --- Resolve command: explicit `--` args → config run.command → error.
+  let command = commandAndArgs;
+  if (!command.length) {
+    const configured = getConfigValue("run.command");
+    if (configured) {
+      command = splitCommand(configured);
+    }
+  }
+  if (!command.length) {
+    throw new Error(
+      "No command specified. Pass `-- <command> [args...]`, or set a default with `apivault config set run.command \"<command>\"`.",
+    );
+  }
+
+  const c = client;
+
+  // 1. Fetch keys filtered by environment (server-side).
+  const params = new URLSearchParams();
+  params.set("environment", env);
+  const keys = await c.request<ApiKeyDTO[]>(`/api/keys?${params.toString()}`);
+
+  if (!keys || keys.length === 0) {
+    process.stdout.write(
+      yellow("⚠ ") +
+        dim(`No keys found for environment "${env}". Running without injected secrets.\n`),
+    );
+  } else {
+    // 2. Decrypt each key and build the env overlay.
+    const envOverlay: Record<string, string> = {};
+
+    for (const k of keys) {
+      const rawValue = await revealKey(c, k.id, opts.key);
+      envOverlay[k.name] = rawValue;
+    }
+
+    // 3. Merge into process.env (child inherits via spawn env option).
+    Object.assign(process.env, envOverlay);
+
+    process.stdout.write(
+      green("→ ") +
+        `${keys.length} secret${keys.length === 1 ? "" : "s"} loaded into process.env\n`,
+    );
+  }
+
+  // 4. Spawn the child command. cross-spawn resolves .cmd/.bat on Windows
+  //    (so `npm` etc. work) without a shell, avoiding Node's DEP0190 and
+  //    escaping args correctly.
+  const [cmd, ...args] = command;
+  const child = spawn(cmd, args, {
+    stdio: "inherit",
+    env: process.env,
+  });
+
+  return new Promise<void>((resolve) => {
+    child.on("close", (code) => {
+      if (code !== null && code !== 0) {
+        process.exitCode = code;
+      }
+      resolve();
+    });
+
+    child.on("error", (err) => {
+      reportError(err, false);
+      process.exitCode = 1;
+      resolve();
+    });
+  });
+}
+
+/** Register the `run` command on the parent program. */
+export function registerRunCommand(program: Command): void {
+  program
+    .command("run")
+    .description("Inject secrets into process.env and run a command")
+    .option("--env <environment>", "Environment to load secrets from (or set config run.env)")
+    .option("--key <passphrase>", "Vault key for custom-mode accounts (or set APIVAULT_KEY)")
+    .allowUnknownOption(true)
+    .action(async (opts: RunOpts, cmd: Command) => {
+      // Prefer an explicit `--` separator, which survives option parsing
+      // everywhere. Fall back to Commander's remaining operands for shells
+      // (e.g. PowerShell) that strip `--` before native commands see it.
+      const separatorIdx = process.argv.indexOf("--");
+      const commandAndArgs =
+        separatorIdx !== -1
+          ? process.argv.slice(separatorIdx + 1)
+          : cmd.args;
+      return runCommand(opts, commandAndArgs).catch((err) => {
+        reportError(err, false);
+        process.exitCode = 1;
+      });
+    });
+}

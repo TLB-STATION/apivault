@@ -25,10 +25,12 @@
     "@inquirer/prompts": "^7.2.1",
     "cli-table3": "^0.6.5",
     "commander": "^12.1.0",
+    "cross-spawn": "^7.0.6",
     "open": "^10.1.0",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
     "@types/node": "^20.17.10",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
