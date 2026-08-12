@@ -89,9 +89,10 @@ apivault keys add \
 ### Custom encryption key
 
 If you've set a **custom vault key** on the website (Settings → Encryption Key),
-revealing a raw value requires that passphrase. The CLI resolves it in this order:
+operations that encrypt or decrypt keys need that passphrase. The CLI resolves it
+in this order:
 
-1. `--key` flag
+1. `--key` flag (`keys get --reveal`, `run`, `env export` only)
 2. `APIVAULT_KEY` environment variable
 3. Config value `vaultKey` (see [Local config](#local-config) below)
 4. Interactive hidden prompt (when the server requires it)
@@ -103,6 +104,8 @@ APIVAULT_KEY="your passphrase" apivault keys get <id> --reveal
 # or:
 apivault config set vaultKey          # store locally (prompts hidden)
 apivault keys get <id> --reveal       # uses stored key
+apivault keys add                     # also uses stored key on custom-mode accounts
+apivault keys update <id>             # also uses stored key on custom-mode accounts
 # or just: apivault keys get <id> --reveal   (you'll be prompted)
 ```
 
