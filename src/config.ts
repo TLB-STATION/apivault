@@ -56,6 +56,13 @@ export function writeToken(token: {
   ensureDataDir();
   const payload: StoredToken = { ...token, createdAt: new Date().toISOString() };
   writeFileSync(TOKEN_PATH, JSON.stringify(payload, null, 2), "utf8");
+  if (process.platform !== "win32") {
+    try {
+      chmodSync(TOKEN_PATH, 0o600);
+    } catch {
+      // best-effort
+    }
+  }
 }
 
 /** Remove the persisted token (logout). */
