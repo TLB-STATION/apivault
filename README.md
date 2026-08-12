@@ -114,7 +114,10 @@ reset by deleting them on the website).
 ## Run with secrets
 
 Load all keys for an environment, decrypt them, inject each key **name** as an
-environment variable, and spawn a child command:
+environment variable, and spawn a child command. **Local dotenv files are
+ignored** — any `.env`, `.env.local`, etc. in the project directory are renamed
+to `*.apivault-run-hidden` before the command starts and left that way. Use
+`apivault env export` when you need a `.env` file on disk instead.
 
 ```bash
 apivault run --env Production -- npm start
@@ -152,6 +155,8 @@ directly (Next.js, Vite, Docker Compose, etc.):
 apivault env export --env Production
 apivault env export --env Staging -o .env.local
 apivault env export --env Production --force   # replace file instead of merge
+apivault env restore                           # undo `apivault run` dotenv renames
+apivault env restore -C /path/to/project
 ```
 
 **Environment** resolves the same way as `run`: `--env` flag → config `run.env` → error.
@@ -166,8 +171,13 @@ you not to commit secrets; add `.env` to `.gitignore`.
 For custom-mode accounts, pass `--key` or use the same vault-key resolution as
 `keys get --reveal` (`APIVAULT_KEY`, config `vaultKey`, or prompt).
 
+**Restore** renames dotenv backups created by `apivault run` (e.g.
+`.env.apivault-run-hidden` → `.env`) in the current directory, or in `-C` /
+`--directory` if given.
+
 ```bash
 apivault --json env export --env Production | jq .
+apivault --json env restore
 ```
 
 ## Local config

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { resolve } from "node:path";
 import { client } from "../http";
 import { getConfigValue } from "../config";
 import { revealKey, type ApiKeyDTO } from "./keys";
@@ -8,6 +9,7 @@ import {
   readEnvFile,
   writeEnvFile,
 } from "../env-file";
+import { restoreDotenvFiles } from "../run-env";
 import { printJson, printSuccess, dim, yellow, reportError } from "../ui/format";
 
 interface ExportOpts {
@@ -15,6 +17,10 @@ interface ExportOpts {
   output?: string;
   key?: string;
   force?: boolean;
+}
+
+interface RestoreOpts {
+  directory?: string;
 }
 
 /**
@@ -69,6 +75,30 @@ async function exportEnv(opts: ExportOpts, json: boolean): Promise<void> {
   );
 }
 
+/**
+ * apivault env restore — rename dotenv backups created by `apivault run`
+ * back to their original filenames.
+ */
+async function restoreEnv(opts: RestoreOpts, json: boolean): Promise<void> {
+  const dir = resolve(opts.directory ?? process.cwd());
+  const restored = restoreDotenvFiles(dir);
+
+  if (json) {
+    printJson({ directory: dir, restored });
+    return;
+  }
+
+  if (restored.length === 0) {
+    process.stdout.write(dim(`No hidden dotenv files found in ${dir}.\n`));
+    return;
+  }
+
+  printSuccess(
+    `Restored ${restored.length} dotenv file${restored.length === 1 ? "" : "s"}: ${restored.join(", ")}`,
+    json,
+  );
+}
+
 /** Register the `env` command group on the parent program. */
 export function registerEnvCommand(program: Command): void {
   const json = () => Boolean(program.opts().json);
@@ -79,7 +109,7 @@ export function registerEnvCommand(program: Command): void {
 
   const env = program
     .command("env")
-    .description("Export vault secrets to a local .env file");
+    .description("Export vault secrets to or restore local .env files");
 
   env
     .command("export")
@@ -89,4 +119,10 @@ export function registerEnvCommand(program: Command): void {
     .option("--key <passphrase>", "Vault key for custom-mode accounts (or set APIVAULT_KEY)")
     .option("-f, --force", "Replace the file instead of merging with existing variables")
     .action(async (opts: ExportOpts) => exportEnv(opts, json()).catch(handle));
+
+  env
+    .command("restore")
+    .description("Restore dotenv files moved aside by `apivault run`")
+    .option("-C, --directory <dir>", "Project directory (default: current working directory)")
+    .action(async (opts: RestoreOpts) => restoreEnv(opts, json()).catch(handle));
 }

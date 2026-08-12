@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { client } from "../http";
 import { revealKey, type ApiKeyDTO } from "./keys";
 import { getConfigValue } from "../config";
+import { buildRunEnv, hideDotenvFiles } from "../run-env";
 import { green, dim, yellow, reportError } from "../ui/format";
 
 interface RunOpts {
@@ -27,7 +28,9 @@ function splitCommand(cmd: string): string[] {
  *
  * Env and command resolve with explicit flags first, then fall back to the
  * local config (`run.env`, `run.command`). Loads all secrets for the env,
- * injects them into process.env, and spawns the command.
+ * injects them into the child environment, and spawns the command. Local
+ * dotenv files (.env, .env.local, etc.) are ignored so vault secrets are
+ * the only source of configuration values.
  */
 async function runCommand(opts: RunOpts, commandAndArgs: string[]): Promise<void> {
   // --- Resolve environment: --env flag → config run.env → error.
@@ -59,6 +62,8 @@ async function runCommand(opts: RunOpts, commandAndArgs: string[]): Promise<void
   params.set("environment", env);
   const keys = await c.request<ApiKeyDTO[]>(`/api/keys?${params.toString()}`);
 
+  const envOverlay: Record<string, string> = {};
+
   if (!keys || keys.length === 0) {
     process.stdout.write(
       yellow("⚠ ") +
@@ -66,29 +71,35 @@ async function runCommand(opts: RunOpts, commandAndArgs: string[]): Promise<void
     );
   } else {
     // 2. Decrypt each key and build the env overlay.
-    const envOverlay: Record<string, string> = {};
-
     for (const k of keys) {
       const rawValue = await revealKey(c, k.id, opts.key);
       envOverlay[k.name] = rawValue;
     }
 
-    // 3. Merge into process.env (child inherits via spawn env option).
-    Object.assign(process.env, envOverlay);
-
     process.stdout.write(
       green("→ ") +
-        `${keys.length} secret${keys.length === 1 ? "" : "s"} loaded into process.env\n`,
+        `${keys.length} secret${keys.length === 1 ? "" : "s"} loaded for the child process\n`,
     );
   }
 
-  // 4. Spawn the child command. cross-spawn resolves .cmd/.bat on Windows
+  const childEnv = buildRunEnv(envOverlay);
+  const hiddenDotenvFiles = hideDotenvFiles(process.cwd());
+  if (hiddenDotenvFiles.length > 0) {
+    process.stdout.write(
+      dim(
+        `Local dotenv file${hiddenDotenvFiles.length === 1 ? "" : "s"} moved aside: ${hiddenDotenvFiles.join(", ")}\n`,
+      ),
+    );
+  }
+
+  // 3. Spawn the child command. cross-spawn resolves .cmd/.bat on Windows
   //    (so `npm` etc. work) without a shell, avoiding Node's DEP0190 and
   //    escaping args correctly.
   const [cmd, ...args] = command;
   const child = spawn(cmd, args, {
     stdio: "inherit",
-    env: process.env,
+    env: childEnv,
+    cwd: process.cwd(),
   });
 
   return new Promise<void>((resolve) => {
@@ -111,7 +122,7 @@ async function runCommand(opts: RunOpts, commandAndArgs: string[]): Promise<void
 export function registerRunCommand(program: Command): void {
   program
     .command("run")
-    .description("Inject secrets into process.env and run a command")
+    .description("Inject vault secrets and run a command (local .env files are ignored)")
     .option("--env <environment>", "Environment to load secrets from (or set config run.env)")
     .option("--key <passphrase>", "Vault key for custom-mode accounts (or set APIVAULT_KEY)")
     .allowUnknownOption(true)
