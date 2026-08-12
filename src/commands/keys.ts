@@ -86,46 +86,67 @@ async function getKey(id: string, opts: KeyOpts): Promise<void> {
 }
 
 /**
+ * Resolve the custom vault passphrase from (in order): an explicit flag,
+ * APIVAULT_KEY, or config vaultKey.
+ */
+export function resolveVaultKey(vaultKeyFlag?: string): string | undefined {
+  return (vaultKeyFlag ?? process.env.APIVAULT_KEY ?? getConfigValue("vaultKey"))?.trim() || undefined;
+}
+
+async function promptVaultKey(): Promise<string> {
+  return (
+    await password({
+      message: "Vault key (custom encryption passphrase):",
+      mask: "*",
+    })
+  ).trim();
+}
+
+/**
+ * Run a vault-key-protected request. Sends X-Vault-Key when a passphrase is
+ * available; prompts on VAULT_KEY_REQUIRED if none was provided yet.
+ */
+async function withVaultKey<T>(
+  vaultKeyFlag: string | undefined,
+  fn: (headers: Record<string, string>) => Promise<T>,
+): Promise<T> {
+  const vaultKey = resolveVaultKey(vaultKeyFlag);
+  const headersFor = (passphrase?: string): Record<string, string> => {
+    const h: Record<string, string> = {};
+    const value = passphrase ?? vaultKey;
+    if (value) h["X-Vault-Key"] = value;
+    return h;
+  };
+
+  try {
+    return await fn(headersFor());
+  } catch (err) {
+    if (err instanceof ApiError && err.code === "VAULT_KEY_REQUIRED") {
+      if (vaultKey) throw new ApiError("That vault key is incorrect.", 403, undefined);
+      const passphrase = await promptVaultKey();
+      return fn(headersFor(passphrase));
+    }
+    throw err;
+  }
+}
+
+/**
  * Decrypt a key. Default-mode accounts work with just the Bearer token.
- * Custom-mode accounts need the vault passphrase, resolved from (in order):
- * the --key flag, the APIVAULT_KEY env var, or an interactive hidden prompt
- * that only fires when the server reports VAULT_KEY_REQUIRED.
+ * Custom-mode accounts need the vault passphrase via resolveVaultKey or prompt.
  */
 export async function revealKey(
   c: typeof client,
   id: string,
   keyFlag?: string,
 ): Promise<string> {
-  const vaultKey = (keyFlag ?? process.env.APIVAULT_KEY ?? getConfigValue("vaultKey"))?.trim();
-
-  const tryDecrypt = async (passphrase?: string) => {
-    const headers: Record<string, string> = {};
-    if (passphrase) headers["X-Vault-Key"] = passphrase;
-    return c.request<{ rawKey?: string; error?: string }>(
+  const decrypted = await withVaultKey(keyFlag, (headers) =>
+    c.request<{ rawKey?: string; error?: string }>(
       `/api/keys/${encodeURIComponent(id)}/decrypt`,
       { method: "POST", headers },
-    );
-  };
-
-  try {
-    const decrypted = await tryDecrypt(vaultKey);
-    if (!decrypted?.rawKey) throw new ApiError("Could not decrypt that key.", 500, decrypted);
-    return decrypted.rawKey;
-  } catch (err) {
-    if (err instanceof ApiError && err.code === "VAULT_KEY_REQUIRED") {
-      // Custom mode and no usable passphrase yet — prompt (unless one was
-      // already provided and rejected, in which case surface the error).
-      if (vaultKey) throw new ApiError("That vault key is incorrect.", 403, undefined);
-      const passphrase = (await password({
-        message: "Vault key (custom encryption passphrase):",
-        mask: "*",
-      })).trim();
-      const decrypted = await tryDecrypt(passphrase);
-      if (!decrypted?.rawKey) throw new ApiError("Could not decrypt that key.", 500, decrypted);
-      return decrypted.rawKey;
-    }
-    throw err;
-  }
+    ),
+  );
+  if (!decrypted?.rawKey) throw new ApiError("Could not decrypt that key.", 500, decrypted);
+  return decrypted.rawKey;
 }
 
 /** apivault keys add — interactive, or fully via flags for scripting. */
@@ -160,16 +181,19 @@ async function addKey(opts: KeyOpts & AddKeyFields): Promise<void> {
       ? opts.notes.trim()
       : (await input({ message: "Notes (optional):", default: "" })).trim();
 
-  const created = await c.request<ApiKeyDTO>("/api/keys", {
-    method: "POST",
-    json: {
-      name,
-      service,
-      environment,
-      notes: notes || undefined,
-      key: keyValue,
-    },
-  });
+  const created = await withVaultKey(undefined, (headers) =>
+    c.request<ApiKeyDTO>("/api/keys", {
+      method: "POST",
+      headers,
+      json: {
+        name,
+        service,
+        environment,
+        notes: notes || undefined,
+        key: keyValue,
+      },
+    }),
+  );
 
   if (opts.json) {
     printJson(created);
@@ -218,16 +242,19 @@ async function updateKey(id: string, opts: KeyOpts): Promise<void> {
     default: existing.notes ?? "",
   });
 
-  const updated = await c.request<ApiKeyDTO>(`/api/keys/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    json: {
-      name: name.trim(),
-      service: service.trim(),
-      environment: environment.trim(),
-      notes: notes.trim(),
-      ...(keyValue ? { key: keyValue.trim() } : {}),
-    },
-  });
+  const updated = await withVaultKey(undefined, (headers) =>
+    c.request<ApiKeyDTO>(`/api/keys/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers,
+      json: {
+        name: name.trim(),
+        service: service.trim(),
+        environment: environment.trim(),
+        notes: notes.trim(),
+        ...(keyValue ? { key: keyValue.trim() } : {}),
+      },
+    }),
+  );
 
   if (opts.json) {
     printJson(updated);
