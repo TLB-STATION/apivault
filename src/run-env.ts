@@ -18,66 +18,22 @@ const KNOWN_DOTENV_FILES = [
   ".env.test.local",
 ];
 
-/** Non-secret parent env keys worth preserving for the child process. */
-const PRESERVED_ENV_KEYS = new Set([
-  "PATH",
-  "PATHEXT",
-  "SystemRoot",
-  "WINDIR",
-  "COMSPEC",
-  "HOME",
-  "USERPROFILE",
-  "HOMEDRIVE",
-  "HOMEPATH",
-  "TEMP",
-  "TMP",
-  "APPDATA",
-  "LOCALAPPDATA",
-  "USER",
-  "USERNAME",
-  "LOGNAME",
-  "SHELL",
-  "TERM",
-  "LANG",
-  "LC_ALL",
-  "LC_CTYPE",
-  "NODE_ENV",
-  "PORT",
-  "HOST",
-  "HOSTNAME",
-  "CI",
-  "FORCE_COLOR",
-  "NO_COLOR",
-  "TERM_PROGRAM",
-  "COLORTERM",
-  "WSL_DISTRO_NAME",
-  "WT_SESSION",
-]);
-
-function shouldPreserveEnvKey(key: string): boolean {
-  if (PRESERVED_ENV_KEYS.has(key)) return true;
-  if (key.startsWith("npm_") || key.startsWith("NPM_")) return true;
-  return false;
-}
-
 /**
- * Build an isolated environment for `apivault run`: preserve essential
- * system/shell vars, inject vault secrets, and tell Next.js not to merge
- * local dotenv files into process.env.
+ * Build the child environment for `apivault run`: inherit the parent shell
+ * environment (so system tools, proxies, SSH agents, etc. work), then layer
+ * vault secrets on top so they take precedence.
+ *
+ * Local dotenv files are already physically renamed by `hideDotenvFiles`,
+ * so frameworks won't load them regardless of what's in process.env.
+ * `__NEXT_PROCESSED_ENV` is set as an additional safeguard to tell Next.js
+ * its env has already been populated.
  */
 export function buildRunEnv(secrets: Record<string, string>): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
+  return {
+    ...process.env,
+    ...secrets,
     __NEXT_PROCESSED_ENV: "true",
   };
-
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined && shouldPreserveEnvKey(key)) {
-      env[key] = value;
-    }
-  }
-
-  Object.assign(env, secrets);
-  return env;
 }
 
 function isHiddenDotenvBackup(name: string): boolean {
@@ -119,8 +75,9 @@ function listDotenvFiles(dir: string): string[] {
 }
 
 /**
- * Rename local dotenv files so frameworks do not read them. Files are left
- * renamed (e.g. `.env` → `.env.apivault-run-hidden`) and are not restored.
+ * Rename local dotenv files so frameworks do not read them (e.g. `.env` →
+ * `.env.apivault-run-hidden`). `apivault run` restores them when the child
+ * exits; use `apivault env restore` if that did not happen.
  */
 export function hideDotenvFiles(dir: string): string[] {
   const hidden: string[] = [];

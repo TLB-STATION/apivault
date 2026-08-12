@@ -116,7 +116,8 @@ reset by deleting them on the website).
 Load all keys for an environment, decrypt them, inject each key **name** as an
 environment variable, and spawn a child command. **Local dotenv files are
 ignored** — any `.env`, `.env.local`, etc. in the project directory are renamed
-to `*.apivault-run-hidden` before the command starts and left that way. Use
+to `*.apivault-run-hidden` while the command runs, then restored automatically
+when it exits. If restore fails, run `apivault env restore`. Use
 `apivault env export` when you need a `.env` file on disk instead.
 
 ```bash
@@ -171,9 +172,9 @@ you not to commit secrets; add `.env` to `.gitignore`.
 For custom-mode accounts, pass `--key` or use the same vault-key resolution as
 `keys get --reveal` (`APIVAULT_KEY`, config `vaultKey`, or prompt).
 
-**Restore** renames dotenv backups created by `apivault run` (e.g.
-`.env.apivault-run-hidden` → `.env`) in the current directory, or in `-C` /
-`--directory` if given.
+**Restore** renames dotenv backups back to their original names (e.g.
+`.env.apivault-run-hidden` → `.env`). `apivault run` does this automatically on
+exit; use `env restore` manually if files were left hidden.
 
 ```bash
 apivault --json env export --env Production | jq .

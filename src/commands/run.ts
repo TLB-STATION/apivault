@@ -1,9 +1,11 @@
+import type { ChildProcess } from "node:child_process";
+import { constants } from "node:os";
 import spawn from "cross-spawn";
 import { Command } from "commander";
 import { client } from "../http";
 import { revealKey, type ApiKeyDTO } from "./keys";
 import { getConfigValue } from "../config";
-import { buildRunEnv, hideDotenvFiles } from "../run-env";
+import { buildRunEnv, hideDotenvFiles, restoreDotenvFiles } from "../run-env";
 import { green, dim, yellow, reportError } from "../ui/format";
 
 interface RunOpts {
@@ -21,6 +23,12 @@ function splitCommand(cmd: string): string[] {
   const matches = cmd.match(/(?:[^\s"]+|"[^"]*")+/g);
   if (!matches) return [];
   return matches.map((s) => s.replace(/^"|"$/g, ""));
+}
+
+/** Conventional shell exit code for a process terminated by `signal`. */
+function exitCodeForSignal(signal: string): number {
+  const n = constants.signals[signal as keyof typeof constants.signals];
+  return typeof n === "number" ? 128 + n : 128;
 }
 
 /**
@@ -83,7 +91,8 @@ async function runCommand(opts: RunOpts, commandAndArgs: string[]): Promise<void
   }
 
   const childEnv = buildRunEnv(envOverlay);
-  const hiddenDotenvFiles = hideDotenvFiles(process.cwd());
+  const projectDir = process.cwd();
+  const hiddenDotenvFiles = hideDotenvFiles(projectDir);
   if (hiddenDotenvFiles.length > 0) {
     process.stdout.write(
       dim(
@@ -92,25 +101,77 @@ async function runCommand(opts: RunOpts, commandAndArgs: string[]): Promise<void
     );
   }
 
+  // Best-effort restore of dotenv files. Safe to call multiple times — if
+  // files have already been restored (or were never hidden), it's a no-op.
+  let restored = false;
+  const restoreDotenv = () => {
+    if (restored) return;
+    restored = true;
+    try {
+      const files = restoreDotenvFiles(projectDir);
+      if (files.length > 0) {
+        process.stdout.write(
+          dim(
+            `\nRestored dotenv file${files.length === 1 ? "" : "s"}: ${files.join(", ")}\n`,
+          ),
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(
+        yellow("⚠ ") +
+          dim(`Could not restore dotenv files (run \`apivault env restore\`): ${message}\n`),
+      );
+    }
+  };
+
+  let child: ChildProcess | undefined;
+
+  const cleanupParentHandlers = () => {
+    process.removeListener("SIGINT", onSigint);
+    process.removeListener("SIGTERM", onSigterm);
+  };
+
+  // Restore dotenv files if the parent is interrupted before the child exits.
+  const onParentSignal = (signal: NodeJS.Signals) => {
+    child?.kill();
+    restoreDotenv();
+    cleanupParentHandlers();
+    process.exit(exitCodeForSignal(signal));
+  };
+  const onSigint = () => onParentSignal("SIGINT");
+  const onSigterm = () => onParentSignal("SIGTERM");
+  process.on("SIGINT", onSigint);
+  process.on("SIGTERM", onSigterm);
+
   // 3. Spawn the child command. cross-spawn resolves .cmd/.bat on Windows
   //    (so `npm` etc. work) without a shell, avoiding Node's DEP0190 and
   //    escaping args correctly.
   const [cmd, ...args] = command;
-  const child = spawn(cmd, args, {
+  child = spawn(cmd, args, {
     stdio: "inherit",
     env: childEnv,
-    cwd: process.cwd(),
+    cwd: projectDir,
   });
+  const spawned = child;
 
   return new Promise<void>((resolve) => {
-    child.on("close", (code) => {
+    spawned.on("close", (code, signal) => {
+      cleanupParentHandlers();
+      restoreDotenv();
+
       if (code !== null && code !== 0) {
         process.exitCode = code;
+      } else if (code === null && signal) {
+        process.exitCode = exitCodeForSignal(signal);
       }
       resolve();
     });
 
-    child.on("error", (err) => {
+    spawned.on("error", (err) => {
+      cleanupParentHandlers();
+      restoreDotenv();
+
       reportError(err, false);
       process.exitCode = 1;
       resolve();
