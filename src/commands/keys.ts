@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { input, password, confirm } from "@inquirer/prompts";
 import { ApiError, client } from "../http";
-import { type GlobalOptions } from "../config";
+import { type GlobalOptions, getConfigValue } from "../config";
 import {
   renderKeysTable,
   renderKeyDetail,
@@ -12,7 +12,7 @@ import {
   reportError,
 } from "../ui/format";
 
-interface ApiKeyDTO {
+export interface ApiKeyDTO {
   id: string;
   name: string;
   service?: string;
@@ -91,12 +91,12 @@ async function getKey(id: string, opts: KeyOpts): Promise<void> {
  * the --key flag, the APIVAULT_KEY env var, or an interactive hidden prompt
  * that only fires when the server reports VAULT_KEY_REQUIRED.
  */
-async function revealKey(
+export async function revealKey(
   c: typeof client,
   id: string,
   keyFlag?: string,
 ): Promise<string> {
-  const vaultKey = (keyFlag ?? process.env.APIVAULT_KEY)?.trim();
+  const vaultKey = (keyFlag ?? process.env.APIVAULT_KEY ?? getConfigValue("vaultKey"))?.trim();
 
   const tryDecrypt = async (passphrase?: string) => {
     const headers: Record<string, string> = {};

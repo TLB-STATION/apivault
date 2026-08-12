@@ -1,6 +1,8 @@
 import { Command } from "commander";
 import { runLogin, runLogout, runWhoami } from "./connect";
 import { registerKeysCommand } from "./commands/keys";
+import { registerRunCommand } from "./commands/run";
+import { registerConfigCommand } from "./commands/config";
 import { reportError } from "./ui/format";
 import { readToken } from "./config";
 
@@ -64,6 +66,8 @@ program
 // Subcommand groups ---------------------------------------------------------
 
 registerKeysCommand(program);
+registerRunCommand(program);
+registerConfigCommand(program);
 
 // When invoked with no arguments at all, print a short status hint. Any
 // unrecognized command is left to commander, which exits non-zero with a
