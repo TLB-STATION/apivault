@@ -143,6 +143,33 @@ as `keys get --reveal` (`APIVAULT_KEY`, config `vaultKey`, or prompt).
 If no keys match the environment, the command still runs but no secrets are
 injected (a warning is printed).
 
+## Export to .env
+
+Write decrypted secrets to a local `.env` file for tools that read dotenv files
+directly (Next.js, Vite, Docker Compose, etc.):
+
+```bash
+apivault env export --env Production
+apivault env export --env Staging -o .env.local
+apivault env export --env Production --force   # replace file instead of merge
+```
+
+**Environment** resolves the same way as `run`: `--env` flag → config `run.env` → error.
+
+By default, existing variables in the target file are **preserved** — vault keys
+are updated in place and new keys are appended. Use `--force` to write a fresh
+file containing only the exported secrets.
+
+The file is written with mode `0600` on Unix (owner-only). A warning reminds
+you not to commit secrets; add `.env` to `.gitignore`.
+
+For custom-mode accounts, pass `--key` or use the same vault-key resolution as
+`keys get --reveal` (`APIVAULT_KEY`, config `vaultKey`, or prompt).
+
+```bash
+apivault --json env export --env Production | jq .
+```
+
 ## Local config
 
 Manage CLI defaults stored in `~/.apivault/config.json`:
