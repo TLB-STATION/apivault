@@ -15,7 +15,7 @@ import { printJson, printSuccess, dim, yellow, reportError } from "../ui/format"
 interface ExportOpts {
   env?: string;
   output?: string;
-  key?: string;
+  vaultKey?: string;
   force?: boolean;
 }
 
@@ -47,7 +47,7 @@ async function exportEnv(opts: ExportOpts, json: boolean): Promise<void> {
 
   const secrets: Record<string, string> = {};
   for (const k of keys) {
-    secrets[k.name] = await revealKey(client, k.id, opts.key);
+    secrets[k.name] = await revealKey(client, k.id, opts.vaultKey);
   }
 
   const existing = opts.force ? "" : readEnvFile(output);
@@ -116,7 +116,10 @@ export function registerEnvCommand(program: Command): void {
     .description("Decrypt keys for an environment and save them to a .env file")
     .option("--env <environment>", "Environment to export (or set config run.env)")
     .option("-o, --output <file>", "Output path (default: .env)", ".env")
-    .option("--key <passphrase>", "Vault key for custom-mode accounts (or set APIVAULT_KEY)")
+    .option(
+      "--vault-key <passphrase>",
+      "Vault key for custom-mode accounts (or set APIVAULT_KEY)",
+    )
     .option("-f, --force", "Replace the file instead of merging with existing variables")
     .action(async (opts: ExportOpts) => exportEnv(opts, json()).catch(handle));
 

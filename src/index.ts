@@ -8,7 +8,7 @@ import { reportError } from "./ui/format";
 import { readToken } from "./config";
 
 const pkg = {
-  name: "apivault-cli",
+  name: "apivault",
   version: "0.1.0",
   description: "Command-line client for an ApiVault instance.",
 };
