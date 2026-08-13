@@ -14,9 +14,18 @@ the database directly.
 
 ## Install
 
-From this directory:
+From npm (recommended):
 
 ```bash
+npm install -g apivault
+apivault --version
+```
+
+From source:
+
+```bash
+git clone https://github.com/Mohamed-Eltelb/apivault-cli.git
+cd apivault-cli
 npm install
 npm run build          # outputs dist/cli.js
 npm install -g .       # exposes the global `apivault` command
@@ -92,13 +101,13 @@ If you've set a **custom vault key** on the website (Settings → Encryption Key
 operations that encrypt or decrypt keys need that passphrase. The CLI resolves it
 in this order:
 
-1. `--key` flag (`keys get --reveal`, `run`, `env export` only)
+1. `--vault-key` flag (`keys get --reveal`, `keys add`, `run`, `env export`)
 2. `APIVAULT_KEY` environment variable
 3. Config value `vaultKey` (see [Local config](#local-config) below)
 4. Interactive hidden prompt (when the server requires it)
 
 ```bash
-apivault keys get <id> --reveal --key "your passphrase"
+apivault keys get <id> --reveal --vault-key "your passphrase"
 # or:
 APIVAULT_KEY="your passphrase" apivault keys get <id> --reveal
 # or:
@@ -144,7 +153,7 @@ apivault config set run.command "npm start"
 apivault run                          # uses both defaults
 ```
 
-For custom-mode accounts, pass `--key` or rely on the same vault-key resolution
+For custom-mode accounts, pass `--vault-key` or rely on the same vault-key resolution
 as `keys get --reveal` (`APIVAULT_KEY`, config `vaultKey`, or prompt).
 
 If no keys match the environment, the command still runs but no secrets are
@@ -172,7 +181,7 @@ file containing only the exported secrets.
 The file is written with mode `0600` on Unix (owner-only). A warning reminds
 you not to commit secrets; add `.env` to `.gitignore`.
 
-For custom-mode accounts, pass `--key` or use the same vault-key resolution as
+For custom-mode accounts, pass `--vault-key` or use the same vault-key resolution as
 `keys get --reveal` (`APIVAULT_KEY`, config `vaultKey`, or prompt).
 
 **Restore** renames dotenv backups back to their original names (e.g.
@@ -203,7 +212,7 @@ config values.
 > The vault key is stored in **plaintext** in `config.json` — the same posture
 > as the auth token in `token.json`. On Unix the file is written with mode
 > `0600` (owner-only). Skip `config set vaultKey` if you prefer to pass
-> `--key` / `APIVAULT_KEY` / the interactive prompt instead.
+> `--vault-key` / `APIVAULT_KEY` / the interactive prompt instead.
 
 ### Scripting
 

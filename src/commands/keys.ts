@@ -29,7 +29,7 @@ interface KeyOpts extends GlobalOptions {
   reveal?: boolean;
   force?: boolean;
   /** Custom vault passphrase (for reveal on custom-mode accounts). */
-  key?: string;
+  vaultKey?: string;
 }
 
 /** Fields `keys add` accepts as flags (enables non-interactive use). */
@@ -37,8 +37,11 @@ interface AddKeyFields {
   name?: string;
   service?: string;
   environment?: string;
+  /** Stored API key / secret value. */
   key?: string;
   notes?: string;
+  /** Custom vault passphrase (custom-mode accounts only). */
+  vaultKey?: string;
 }
 
 /** apivault keys list */
@@ -69,7 +72,7 @@ async function getKey(id: string, opts: KeyOpts): Promise<void> {
 
   let rawKey: string | undefined;
   if (opts.reveal) {
-    rawKey = await revealKey(c, id, opts.key);
+    rawKey = await revealKey(c, id, opts.vaultKey);
   }
 
   if (opts.json) {
@@ -181,7 +184,7 @@ async function addKey(opts: KeyOpts & AddKeyFields): Promise<void> {
       ? opts.notes.trim()
       : (await input({ message: "Notes (optional):", default: "" })).trim();
 
-  const created = await withVaultKey(undefined, (headers) =>
+  const created = await withVaultKey(opts.vaultKey, (headers) =>
     c.request<ApiKeyDTO>("/api/keys", {
       method: "POST",
       headers,
@@ -318,9 +321,12 @@ export function registerKeysCommand(program: Command): void {
     .command("get <id>")
     .description("Show a key. Use --reveal to decrypt and print the raw value.")
     .option("--reveal", "Decrypt and print the raw key value")
-    .option("--key <passphrase>", "Vault key for custom-mode accounts (or set APIVAULT_KEY)")
-    .action(async (id: string, local: { reveal?: boolean; key?: string }) =>
-      getKey(id, { ...globals(), reveal: local.reveal, key: local.key }).catch(handle),
+    .option(
+      "--vault-key <passphrase>",
+      "Vault key for custom-mode accounts (or set APIVAULT_KEY)",
+    )
+    .action(async (id: string, local: { reveal?: boolean; vaultKey?: string }) =>
+      getKey(id, { ...globals(), reveal: local.reveal, vaultKey: local.vaultKey }).catch(handle),
     );
 
   keys
@@ -329,7 +335,11 @@ export function registerKeysCommand(program: Command): void {
     .option("--name <name>", "Key name")
     .option("--service <service>", "Service (default: Custom)")
     .option("--environment <env>", "Environment (default: Production)")
-    .option("--key <key>", "API key value")
+    .option("--key <value>", "API key / secret value to store")
+    .option(
+      "--vault-key <passphrase>",
+      "Vault key for custom-mode accounts (or set APIVAULT_KEY)",
+    )
     .option("--notes <notes>", "Notes")
     .action(async (local: AddKeyFields) =>
       addKey({ ...globals(), ...local }).catch(handle),

@@ -1,8 +1,25 @@
 {
-  "name": "apivault-cli",
+  "name": "apivault",
   "version": "0.1.0",
   "description": "Command-line client for an ApiVault instance. Manage your encrypted API keys from the terminal.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mohamed-Eltelb/apivault-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Mohamed-Eltelb/apivault-cli/issues"
+  },
+  "homepage": "https://github.com/Mohamed-Eltelb/apivault-cli#readme",
+  "keywords": [
+    "apivault",
+    "api-keys",
+    "secrets",
+    "vault",
+    "cli",
+    "dotenv",
+    "env"
+  ],
   "type": "commonjs",
   "bin": {
     "apivault": "dist/cli.js"

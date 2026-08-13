@@ -11,8 +11,8 @@ import { green, dim, yellow, reportError } from "../ui/format";
 interface RunOpts {
   /** Environment to load secrets from. Falls back to config `run.env`. */
   env?: string;
-  /** Vault passphrase for custom-mode accounts (same as --key on keys get). */
-  key?: string;
+  /** Vault passphrase for custom-mode accounts. */
+  vaultKey?: string;
 }
 
 /**
@@ -32,7 +32,7 @@ function exitCodeForSignal(signal: string): number {
 }
 
 /**
- * apivault run [--env <env>] [--key <passphrase>] [-- <command> [args...]]
+ * apivault run [--env <env>] [--vault-key <passphrase>] [-- <command> [args...]]
  *
  * Env and command resolve with explicit flags first, then fall back to the
  * local config (`run.env`, `run.command`). Loads all secrets for the env,
@@ -80,7 +80,7 @@ async function runCommand(opts: RunOpts, commandAndArgs: string[]): Promise<void
   } else {
     // 2. Decrypt each key and build the env overlay.
     for (const k of keys) {
-      const rawValue = await revealKey(c, k.id, opts.key);
+      const rawValue = await revealKey(c, k.id, opts.vaultKey);
       envOverlay[k.name] = rawValue;
     }
 
@@ -185,7 +185,10 @@ export function registerRunCommand(program: Command): void {
     .command("run")
     .description("Inject vault secrets and run a command (local .env files are ignored)")
     .option("--env <environment>", "Environment to load secrets from (or set config run.env)")
-    .option("--key <passphrase>", "Vault key for custom-mode accounts (or set APIVAULT_KEY)")
+    .option(
+      "--vault-key <passphrase>",
+      "Vault key for custom-mode accounts (or set APIVAULT_KEY)",
+    )
     .allowUnknownOption(true)
     .action(async (opts: RunOpts, cmd: Command) => {
       // Prefer an explicit `--` separator, which survives option parsing
