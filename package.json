@@ -5,12 +5,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Mohamed-Eltelb/apivault-cli.git"
+    "url": "git+https://github.com/TLB-STATION/apivault.git"
   },
   "bugs": {
-    "url": "https://github.com/Mohamed-Eltelb/apivault-cli/issues"
+    "url": "https://github.com/TLB-STATION/apivault/issues"
   },
-  "homepage": "https://github.com/Mohamed-Eltelb/apivault-cli#readme",
+  "homepage": "https://github.com/TLB-STATION/apivault#readme",
   "keywords": [
     "apivault",
     "api-keys",
