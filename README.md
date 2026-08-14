@@ -1,232 +1,243 @@
-# ApiVault CLI
+<p align="center">
+  <a href="https://api-vault-opal.vercel.app">
+    <img src="https://api-vault-opal.vercel.app/apivault-cli.png" width="360" alt="ApiVault Logo" style="max-width: 100%;">
+  </a>
+</p>
 
-A command-line client for an ApiVault instance. Manage your encrypted
-API keys from the terminal — connect by approving in your browser, then list,
-add, reveal, update, and delete keys, or inject secrets into a local process.
+<p align="center">
+  The official command-line interface for <strong><a href="https://api-vault-opal.vercel.app">ApiVault</a></strong> — manage encrypted API keys, inject secrets into local processes, and sync environment variables from your terminal.
+</p>
 
-The CLI talks to a **running** ApiVault website over HTTP. It does **not** touch
-the database directly.
+<p align="center">
+  <a href="https://www.npmjs.com/package/apivault"><img src="https://img.shields.io/npm/v/apivault.svg?style=flat-square&color=6366f1" alt="npm version"></a>
+  <a href="https://github.com/Mohamed-Eltelb/apivault-cli/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/apivault.svg?style=flat-square&color=10b981" alt="license"></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/apivault.svg?style=flat-square&color=8b5cf6" alt="node version"></a>
+</p>
 
-## Requirements
+---
 
-- Node.js 18.17 or newer
-- A reachable ApiVault server
+### Requirements
+- **Node.js**: `18.17.0` or higher
 
-## Install
+---
 
-From npm (recommended):
+## Installation
+
+npm Package Manager
 
 ```bash
 npm install -g apivault
-apivault --version
 ```
 
-From source:
+Or run on-demand without a global install:
 
 ```bash
-git clone https://github.com/Mohamed-Eltelb/apivault-cli.git
-cd apivault-cli
-npm install
-npm run build          # outputs dist/cli.js
-npm install -g .       # exposes the global `apivault` command
+npx apivault <command>
 ```
 
-For development without a global install:
+<details>
+<summary>Other package managers</summary>
 
 ```bash
-npm run dev -- keys list        # runs via tsx, no build step
+pnpm add -g apivault
+yarn global add apivault
+bun install -g apivault
 ```
 
-## Connect (sign in)
+</details>
 
-Sign-in happens in your browser, not the terminal:
+<details>
+<summary>Standalone installer scripts (no npm required)</summary>
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://api-vault-opal.vercel.app/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://api-vault-opal.vercel.app/install.ps1 | iex
+```
+
+Installs into `~/.local/share/apivault` and links `~/.local/bin/apivault` — no root/sudo required.
+
+</details>
+
+---
+
+## Command Reference
+
+| Command | Description |
+| :--- | :--- |
+| `apivault login` | Authenticate via browser approval |
+| `apivault logout` | Revoke session and clear stored token |
+| `apivault whoami` | Show the connected user |
+| `apivault keys list` | List all vault keys (masked) |
+| `apivault keys add` | Add a new secret (interactive or flags) |
+| `apivault keys get <id>` | View key details; add `--reveal` to decrypt |
+| `apivault keys update <id>` | Edit a stored key |
+| `apivault keys delete <id>` | Delete a key (`-f` to skip prompt) |
+| `apivault run` | Inject secrets into a child process |
+| `apivault env export` | Write secrets to a `.env` file |
+| `apivault env restore` | Restore `.env` files hidden by `run` |
+| `apivault config list\|get\|set\|delete` | Manage local CLI defaults |
+
+**Global flags:** `--json` (machine-readable output), `--timeout <seconds>` (browser approval wait, default 300).
+
+---
+
+## Authentication
 
 ```bash
 apivault login
 ```
 
-This opens your browser to an **Approve / Refuse** page.
-
-- **If you're already signed into ApiVault** in that browser, you'll see the
-  connect prompt immediately — choose **Approve** to issue a token to this CLI.
-- **If you're not signed in**, you'll be redirected to log in first, then sent
-  back to the approve page automatically.
-
-The CLI waits in the terminal (press **Ctrl+C** to cancel). Once you Approve, it
-saves a personal API token and is signed in for all later commands. Override the
-wait with `--timeout <seconds>` (default 300).
+1. Opens your default browser to an **Approve / Refuse** prompt on ApiVault.
+2. If you're not already signed in, you'll be redirected to log in first.
+3. The CLI waits in the terminal until approval is detected (override with `--timeout <seconds>`), then saves an API token under `~/.apivault/token.json`.
 
 ```bash
-apivault whoami      # confirm you're connected
-apivault logout      # revoke this device's token
+apivault whoami                    # check connection status
+apivault logout                    # revoke this device's token
 ```
 
-Local data is stored under `~/.apivault/` (`%USERPROFILE%\.apivault\` on Windows):
+---
 
-| File | Purpose |
-|------|---------|
-| `token.json` | Auth token from `login` (removed by `logout`) |
-| `config.json` | CLI defaults for `run` and optional stored vault key |
-
-> The server URL is compiled into the CLI (not user-configurable). The default
-> points at the production instance; change the `API_BASE_URL` constant in
-> `src/config.ts` and rebuild for local development.
-
-## Manage keys
+## Managing API Keys
 
 ```bash
-apivault keys list                 # all keys, masked
-apivault keys add                  # interactive: name, service, env, value, notes
-apivault keys get <id>             # show one key (masked)
-apivault keys get <id> --reveal    # decrypt and print the raw value
-apivault keys update <id>          # interactive edit
+apivault keys list                 # list stored keys (masked)
+apivault keys add                  # interactive wizard
+apivault keys get <id>             # show key metadata
+apivault keys get <id> --reveal    # decrypt and display raw value
+apivault keys update <id>          # edit key attributes
 apivault keys delete <id>          # confirm, then delete
-apivault keys delete <id> -f       # skip the confirmation prompt
+apivault keys delete <id> -f       # skip confirmation
 ```
 
-`keys add` can also be fully non-interactive for scripting:
+For automation, pass all values as flags:
 
 ```bash
 apivault keys add \
   --name STRIPE_SECRET \
   --service Stripe \
   --environment Production \
-  --key "sk_live_..." \
-  --notes "Billing API"
+  --key "sk_live_51M..." \
+  --notes "Production payment gateway"
 ```
 
-### Custom encryption key
+### Custom Encryption Passphrase
 
-If you've set a **custom vault key** on the website (Settings → Encryption Key),
-operations that encrypt or decrypt keys need that passphrase. The CLI resolves it
-in this order:
+Accounts with a **custom vault key** (Settings → Encryption Key) need the passphrase for encrypt/decrypt operations. The CLI resolves it in order:
 
-1. `--vault-key` flag (`keys get --reveal`, `keys add`, `run`, `env export`)
+1. `--vault-key "passphrase"` flag
 2. `APIVAULT_KEY` environment variable
-3. Config value `vaultKey` (see [Local config](#local-config) below)
-4. Interactive hidden prompt (when the server requires it)
+3. Stored config value (`apivault config set vaultKey`)
+4. Interactive hidden prompt (fallback)
+
+Accounts using default encryption need no passphrase.
+
+---
+
+## Injecting Secrets (`apivault run`)
+
+Decrypt all keys for an environment and inject them as environment variables into a child process — **no `.env` files written to disk**.
 
 ```bash
-apivault keys get <id> --reveal --vault-key "your passphrase"
-# or:
-APIVAULT_KEY="your passphrase" apivault keys get <id> --reveal
-# or:
-apivault config set vaultKey          # store locally (prompts hidden)
-apivault keys get <id> --reveal       # uses stored key
-apivault keys add                     # also uses stored key on custom-mode accounts
-apivault keys update <id>             # also uses stored key on custom-mode accounts
-# or just: apivault keys get <id> --reveal   (you'll be prompted)
-```
-
-Accounts using the **default** encryption need no passphrase — `--reveal` works
-with just the connected token. You can't reveal a custom-mode key without the
-passphrase; if you've forgotten it, the stored keys cannot be recovered (only
-reset by deleting them on the website).
-
-## Run with secrets
-
-Load all keys for an environment, decrypt them, inject each key **name** as an
-environment variable, and spawn a child command. **Local dotenv files are
-ignored** — any `.env`, `.env.local`, etc. in the project directory are renamed
-to `*.apivault-run-hidden` while the command runs, then restored automatically
-when it exits. If restore fails, run `apivault env restore`. Use
-`apivault env export` when you need a `.env` file on disk instead.
-
-```bash
+# Inject Production secrets into npm start
 apivault run --env Production -- npm start
-apivault run --env Staging -- node server.js
+
+# Inject Staging secrets into Python / Node
+apivault run --env Staging -- python main.py
 ```
 
-Each stored key's `name` becomes the env var name (e.g. a key named
-`STRIPE_SECRET` is available as `$STRIPE_SECRET` / `%STRIPE_SECRET%` in the
-child process).
+| Flag | Description |
+| :--- | :--- |
+| `--env <name>` | Vault environment to pull secrets from |
+| `--vault-key <passphrase>` | Custom encryption passphrase |
 
-**Environment** resolves in order: `--env` flag → config `run.env` → error.
+During execution, existing local `.env` files are temporarily renamed to `*.apivault-run-hidden` to prevent framework conflicts, and automatically restored on exit. If restoration fails (e.g. process killed), run `apivault env restore`.
 
-**Command** resolves in order: arguments after `--` → config `run.command` → error.
-
-Set defaults once so you can run without repeating flags:
+Save defaults to skip flags:
 
 ```bash
 apivault config set run.env Production
-apivault config set run.command "npm start"
-apivault run                          # uses both defaults
+apivault config set run.command "npm run dev"
+apivault run                               # uses saved defaults
 ```
 
-For custom-mode accounts, pass `--vault-key` or rely on the same vault-key resolution
-as `keys get --reveal` (`APIVAULT_KEY`, config `vaultKey`, or prompt).
+---
 
-If no keys match the environment, the command still runs but no secrets are
-injected (a warning is printed).
+## Dotenv Management (`apivault env`)
 
-## Export to .env
-
-Write decrypted secrets to a local `.env` file for tools that read dotenv files
-directly (Next.js, Vite, Docker Compose, etc.):
+Export decrypted secrets to local `.env` files for frameworks that require them (Next.js, Vite, Docker Compose, etc.):
 
 ```bash
-apivault env export --env Production
-apivault env export --env Staging -o .env.local
-apivault env export --env Production --force   # replace file instead of merge
-apivault env restore                           # undo `apivault run` dotenv renames
-apivault env restore -C /path/to/project
+apivault env export --env Production               # write to .env (merge)
+apivault env export --env Staging -o .env.local     # custom output path
+apivault env export --env Production --force        # overwrite instead of merge
 ```
 
-**Environment** resolves the same way as `run`: `--env` flag → config `run.env` → error.
+| Flag | Description |
+| :--- | :--- |
+| `--env <name>` | Vault environment to export |
+| `-o, --output <path>` | Target file (default: `.env`) |
+| `-f, --force` | Replace file entirely instead of merging |
+| `--vault-key <passphrase>` | Custom encryption passphrase |
 
-By default, existing variables in the target file are **preserved** — vault keys
-are updated in place and new keys are appended. Use `--force` to write a fresh
-file containing only the exported secrets.
-
-The file is written with mode `0600` on Unix (owner-only). A warning reminds
-you not to commit secrets; add `.env` to `.gitignore`.
-
-For custom-mode accounts, pass `--vault-key` or use the same vault-key resolution as
-`keys get --reveal` (`APIVAULT_KEY`, config `vaultKey`, or prompt).
-
-**Restore** renames dotenv backups back to their original names (e.g.
-`.env.apivault-run-hidden` → `.env`). `apivault run` does this automatically on
-exit; use `env restore` manually if files were left hidden.
+Restore hidden dotenv backups:
 
 ```bash
-apivault --json env export --env Production | jq .
-apivault --json env restore
+apivault env restore                        # current directory
+apivault env restore -C /path/to/project    # specify project directory
 ```
 
-## Local config
+---
+
+## Local Configuration
 
 Manage CLI defaults stored in `~/.apivault/config.json`:
 
 ```bash
-apivault config list                  # all values (vaultKey is masked)
-apivault config get run.command       # print one value
-apivault config set run.env Production
-apivault config set run.command "npm start"
-apivault config set vaultKey          # prompts hidden (avoids shell history)
-apivault config delete run.env
+apivault config list                       # view all (vaultKey is masked)
+apivault config get run.command            # read a value
+apivault config set run.env Production     # set default environment
+apivault config set run.command "npm start" # set default command
+apivault config set vaultKey               # save vault key (hidden input)
+apivault config delete run.env             # remove a value
 ```
 
-Known keys: `run.command`, `run.env`, `vaultKey`. Explicit flags always override
-config values.
+Known keys: `run.command`, `run.env`, `vaultKey`. Explicit flags always take precedence.
 
-> The vault key is stored in **plaintext** in `config.json` — the same posture
-> as the auth token in `token.json`. On Unix the file is written with mode
-> `0600` (owner-only). Skip `config set vaultKey` if you prefer to pass
-> `--vault-key` / `APIVAULT_KEY` / the interactive prompt instead.
+---
 
-### Scripting
+## JSON Output
 
-Add `--json` to any command for machine-readable output:
+Pass `--json` to any command for structured output suitable for `jq` or scripts:
 
 ```bash
-apivault --json keys list | jq '.[] | .id'
-apivault --json keys get abc123 --reveal | jq -r .rawKey | clip
-apivault --json config list
+apivault --json keys list | jq '.[] | {id: .id, name: .name}'
+apivault --json keys get <id> --reveal | jq -r .rawKey | clip
 ```
 
-## Development
+---
 
-```bash
-npm run typecheck    # tsc --noEmit
-npm run build        # tsup bundle to dist/cli.js
-```
+## Security
+
+| Layer | Detail |
+| :--- | :--- |
+| **Transport** | HTTPS with token-header authentication |
+| **Local storage** | `~/.apivault/token.json` and `config.json` written with `0600` permissions (Unix) |
+| **Process isolation** | Secrets exist only in child-process memory during `apivault run` — nothing written to disk |
+
+---
+
+## Documentation & Links
+
+- **Website**: [api-vault-opal.vercel.app](https://api-vault-opal.vercel.app)
+- **CLI Docs**: [api-vault-opal.vercel.app/docs/cli](https://api-vault-opal.vercel.app/docs/cli)
+- **Issues**: [GitHub Issues](https://github.com/Mohamed-Eltelb/apivault-cli/issues)
+
+## License
+
+[MIT](LICENSE)
