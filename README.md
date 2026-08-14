@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/apivault"><img src="https://img.shields.io/npm/v/apivault.svg?style=flat-square&color=6366f1" alt="npm version"></a>
-  <a href="https://github.com/TLB-STATION/apivault/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/apivault.svg?style=flat-square&color=10b981" alt="license"></a>
+  <a href="https://github.com/TLB-STATION/apivault/blob/main/LICENSE"><img src="https://img.shields.io/github/license/TLB-STATION/apivault.svg?style=flat-square&color=10b981" alt="license"></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/apivault.svg?style=flat-square&color=8b5cf6" alt="node version"></a>
 </p>
 
