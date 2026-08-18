@@ -232,10 +232,23 @@ apivault --json keys get <id> --reveal | jq -r .rawKey | clip
 
 ---
 
+## 🤖 AI Agent Skill
+
+If you use AI coding assistants (Cursor, Claude Desktop, Claude Code, Windsurf, Antigravity), install the official [ApiVault Skill](https://github.com/TLB-STATION/apivault-skill) into your workspace:
+
+```bash
+git clone https://github.com/TLB-STATION/apivault-skill.git .agents/skills/apivault
+```
+
+This equips your AI agents with native runbooks, MCP configuration templates, and automated workflows to manage credentials without leaking secrets.
+
+---
+
 ## Documentation & Links
 
 - **Website**: [api-vault-opal.vercel.app](https://api-vault-opal.vercel.app)
 - **CLI Docs**: [api-vault-opal.vercel.app/docs/cli](https://api-vault-opal.vercel.app/docs/cli)
+- **AI Agent Skill**: [github.com/TLB-STATION/apivault-skill](https://github.com/TLB-STATION/apivault-skill)
 - **Issues**: [GitHub Issues](https://github.com/TLB-STATION/apivault/issues)
 
 ## License
