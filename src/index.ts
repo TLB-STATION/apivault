@@ -6,12 +6,7 @@ import { registerConfigCommand } from "./commands/config";
 import { registerEnvCommand } from "./commands/env";
 import { reportError } from "./ui/format";
 import { readToken } from "./config";
-
-const pkg = {
-  name: "apivault",
-  version: "0.1.0",
-  description: "Command-line client for an ApiVault instance.",
-};
+import pkg from "../package.json";
 
 const program = new Command();
 
