@@ -11,7 +11,7 @@ import { green, dim, yellow, reportError } from "../ui/format";
 interface RunOpts {
   /** Environment to load secrets from. Falls back to config `run.env`. */
   env?: string;
-  /** Vault passphrase for custom-mode accounts. */
+  /** Vault key for custom-mode accounts. */
   vaultKey?: string;
 }
 
@@ -32,7 +32,7 @@ function exitCodeForSignal(signal: string): number {
 }
 
 /**
- * apivault run [--env <env>] [--vault-key <passphrase>] [-- <command> [args...]]
+ * apivault run [--env <env>] [--vault-key <vaultKey>] [-- <command> [args...]]
  *
  * Env and command resolve with explicit flags first, then fall back to the
  * local config (`run.env`, `run.command`). Loads all secrets for the env,
@@ -186,7 +186,7 @@ export function registerRunCommand(program: Command): void {
     .description("Inject vault secrets and run a command (local .env files are ignored)")
     .option("--env <environment>", "Environment to load secrets from (or set config run.env)")
     .option(
-      "--vault-key <passphrase>",
+      "--vault-key <vaultKey>",
       "Vault key for custom-mode accounts (or set APIVAULT_KEY)",
     )
     .allowUnknownOption(true)

@@ -112,7 +112,7 @@ async function setConfig(key: string, value: string | undefined, json: boolean):
   assertKnownKey(key);
 
   // For secret keys, prompt with hidden input when no value is given inline
-  // (avoids leaving the passphrase in shell history).
+  // (avoids leaving the vault key in shell history).
   let resolved = value;
   if (resolved === undefined && SECRET_KEYS.has(key)) {
     resolved = (

@@ -28,7 +28,7 @@ interface KeyOpts extends GlobalOptions {
   json?: boolean;
   reveal?: boolean;
   force?: boolean;
-  /** Custom vault passphrase (for reveal on custom-mode accounts). */
+  /** Custom vault key (for reveal on custom-mode accounts). */
   vaultKey?: string;
 }
 
@@ -40,7 +40,7 @@ interface AddKeyFields {
   /** Stored API key / secret value. */
   key?: string;
   notes?: string;
-  /** Custom vault passphrase (custom-mode accounts only). */
+  /** Custom vault key (custom-mode accounts only). */
   vaultKey?: string;
 }
 
@@ -89,7 +89,7 @@ async function getKey(id: string, opts: KeyOpts): Promise<void> {
 }
 
 /**
- * Resolve the custom vault passphrase from (in order): an explicit flag,
+ * Resolve the custom vault key from (in order): an explicit flag,
  * APIVAULT_KEY, or config vaultKey.
  */
 export function resolveVaultKey(vaultKeyFlag?: string): string | undefined {
@@ -99,14 +99,14 @@ export function resolveVaultKey(vaultKeyFlag?: string): string | undefined {
 async function promptVaultKey(): Promise<string> {
   return (
     await password({
-      message: "Vault key (custom encryption passphrase):",
+      message: "Vault key (custom encryption):",
       mask: "*",
     })
   ).trim();
 }
 
 /**
- * Run a vault-key-protected request. Sends X-Vault-Key when a passphrase is
+ * Run a vault-key-protected request. Sends X-Vault-Key when a vault key is
  * available; prompts on VAULT_KEY_REQUIRED if none was provided yet.
  */
 async function withVaultKey<T>(
@@ -114,9 +114,9 @@ async function withVaultKey<T>(
   fn: (headers: Record<string, string>) => Promise<T>,
 ): Promise<T> {
   const vaultKey = resolveVaultKey(vaultKeyFlag);
-  const headersFor = (passphrase?: string): Record<string, string> => {
+  const headersFor = (customVaultKey?: string): Record<string, string> => {
     const h: Record<string, string> = {};
-    const value = passphrase ?? vaultKey;
+    const value = customVaultKey ?? vaultKey;
     if (value) h["X-Vault-Key"] = value;
     return h;
   };
@@ -126,8 +126,8 @@ async function withVaultKey<T>(
   } catch (err) {
     if (err instanceof ApiError && err.code === "VAULT_KEY_REQUIRED") {
       if (vaultKey) throw new ApiError("That vault key is incorrect.", 403, undefined);
-      const passphrase = await promptVaultKey();
-      return fn(headersFor(passphrase));
+      const customVaultKey = await promptVaultKey();
+      return fn(headersFor(customVaultKey));
     }
     throw err;
   }
@@ -135,7 +135,7 @@ async function withVaultKey<T>(
 
 /**
  * Decrypt a key. Default-mode accounts work with just the Bearer token.
- * Custom-mode accounts need the vault passphrase via resolveVaultKey or prompt.
+ * Custom-mode accounts need the vault key via resolveVaultKey or prompt.
  */
 export async function revealKey(
   c: typeof client,
@@ -322,7 +322,7 @@ export function registerKeysCommand(program: Command): void {
     .description("Show a key. Use --reveal to decrypt and print the raw value.")
     .option("--reveal", "Decrypt and print the raw key value")
     .option(
-      "--vault-key <passphrase>",
+      "--vault-key <vaultKey>",
       "Vault key for custom-mode accounts (or set APIVAULT_KEY)",
     )
     .action(async (id: string, local: { reveal?: boolean; vaultKey?: string }) =>
@@ -337,7 +337,7 @@ export function registerKeysCommand(program: Command): void {
     .option("--environment <env>", "Environment (default: Production)")
     .option("--key <value>", "API key / secret value to store")
     .option(
-      "--vault-key <passphrase>",
+      "--vault-key <vaultKey>",
       "Vault key for custom-mode accounts (or set APIVAULT_KEY)",
     )
     .option("--notes <notes>", "Notes")

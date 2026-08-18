@@ -126,16 +126,16 @@ apivault keys add \
   --notes "Production payment gateway"
 ```
 
-### Custom Encryption Passphrase
+### Custom Encryption Vault Key
 
-Accounts with a **custom vault key** (Settings → Encryption Key) need the passphrase for encrypt/decrypt operations. The CLI resolves it in order:
+Accounts with a **custom vault key** (Settings → Encryption Key) need the vault key for encrypt/decrypt operations. The CLI resolves it in order:
 
-1. `--vault-key "passphrase"` flag
+1. `--vault-key "<vault-key>"` flag
 2. `APIVAULT_KEY` environment variable
 3. Stored config value (`apivault config set vaultKey`)
 4. Interactive hidden prompt (fallback)
 
-Accounts using default encryption need no passphrase.
+Accounts using default encryption need no vault key.
 
 ---
 
@@ -154,7 +154,7 @@ apivault run --env Staging -- python main.py
 | Flag | Description |
 | :--- | :--- |
 | `--env <name>` | Vault environment to pull secrets from |
-| `--vault-key <passphrase>` | Custom encryption passphrase |
+| `--vault-key <vault-key>` | Custom encryption vault key |
 
 During execution, existing local `.env` files are temporarily renamed to `*.apivault-run-hidden` to prevent framework conflicts, and automatically restored on exit. If restoration fails (e.g. process killed), run `apivault env restore`.
 
@@ -183,7 +183,7 @@ apivault env export --env Production --force        # overwrite instead of merge
 | `--env <name>` | Vault environment to export |
 | `-o, --output <path>` | Target file (default: `.env`) |
 | `-f, --force` | Replace file entirely instead of merging |
-| `--vault-key <passphrase>` | Custom encryption passphrase |
+| `--vault-key <vault-key>` | Custom encryption vault key |
 
 Restore hidden dotenv backups:
 
