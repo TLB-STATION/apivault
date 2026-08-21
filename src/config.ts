@@ -8,7 +8,7 @@ import { join } from "node:path";
  * Hardcoded by design: end users never configure this. For local development it
  * points at the dev server; change this constant when you deploy and rebuild.
  */
-export const API_BASE_URL = "https://api-vault-opal.vercel.app";
+export const API_BASE_URL = "https://apivault.tech";
 
 export interface GlobalOptions {
   /** Emit machine-readable JSON instead of formatted tables. */

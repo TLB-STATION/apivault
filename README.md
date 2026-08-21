@@ -1,11 +1,11 @@
 <p align="center">
-  <a href="https://api-vault-opal.vercel.app">
-    <img src="https://api-vault-opal.vercel.app/apivault-cli.png" width="360" alt="ApiVault Logo" style="max-width: 100%;">
+  <a href="https://apivault.tech">
+    <img src="https://apivault.tech/apivault-cli.png" width="360" alt="ApiVault Logo" style="max-width: 100%;">
   </a>
 </p>
 
 <p align="center">
-  The official command-line interface for <strong><a href="https://api-vault-opal.vercel.app">ApiVault</a></strong> — manage encrypted API keys, inject secrets into local processes, and sync environment variables from your terminal.
+  The official command-line interface for <strong><a href="https://apivault.tech">ApiVault</a></strong> — manage encrypted API keys, inject secrets into local processes, and sync environment variables from your terminal.
 </p>
 
 <p align="center">
@@ -51,12 +51,12 @@ bun install -g apivault
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://api-vault-opal.vercel.app/install.sh | sh
+curl -fsSL https://apivault.tech/install.sh | sh
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://api-vault-opal.vercel.app/install.ps1 | iex
+irm https://apivault.tech/install.ps1 | iex
 ```
 
 Installs into `~/.local/share/apivault` and links `~/.local/bin/apivault` — no root/sudo required.
@@ -246,8 +246,8 @@ This equips your AI agents with native runbooks, MCP configuration templates, an
 
 ## Documentation & Links
 
-- **Website**: [api-vault-opal.vercel.app](https://api-vault-opal.vercel.app)
-- **CLI Docs**: [api-vault-opal.vercel.app/docs/cli](https://api-vault-opal.vercel.app/docs/cli)
+- **Website**: [apivault.tech](https://apivault.tech)
+- **CLI Docs**: [apivault.tech/docs/cli](https://apivault.tech/docs/cli)
 - **AI Agent Skill**: [github.com/TLB-STATION/apivault-skill](https://github.com/TLB-STATION/apivault-skill)
 - **Issues**: [GitHub Issues](https://github.com/TLB-STATION/apivault/issues)
 
