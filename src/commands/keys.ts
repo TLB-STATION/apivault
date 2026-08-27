@@ -64,12 +64,15 @@ async function getKey(id: string, opts: KeyOpts): Promise<void> {
   const c = client;
   const projectId = getActiveProjectId(opts.project);
 
-  // The list endpoint gives us the masked view; find the matching key.
-  const keys = await c.request<ApiKeyDTO[]>("/api/keys", { projectId });
-  const key = keys.find((k) => k.id === id);
-  if (!key) {
-    throw new ApiError(`No key with id "${id}".`, 404, undefined);
-  }
+  // Fetch the specific masked key.
+  const key = await c
+    .request<ApiKeyDTO>(`/api/keys/${encodeURIComponent(id)}`, { projectId })
+    .catch((err) => {
+      if (err instanceof ApiError && err.status === 404) {
+        throw new ApiError(`No key with id "${id}".`, 404, undefined);
+      }
+      throw err;
+    });
 
   let rawKey: string | undefined;
   if (opts.reveal) {
@@ -217,11 +220,14 @@ async function updateKey(id: string, opts: KeyOpts): Promise<void> {
   const c = client;
   const projectId = getActiveProjectId(opts.project);
 
-  const keys = await c.request<ApiKeyDTO[]>("/api/keys", { projectId });
-  const existing = keys.find((k) => k.id === id);
-  if (!existing) {
-    throw new ApiError(`No key with id "${id}".`, 404, undefined);
-  }
+  const existing = await c
+    .request<ApiKeyDTO>(`/api/keys/${encodeURIComponent(id)}`, { projectId })
+    .catch((err) => {
+      if (err instanceof ApiError && err.status === 404) {
+        throw new ApiError(`No key with id "${id}".`, 404, undefined);
+      }
+      throw err;
+    });
 
   const name = await input({
     message: "Key name:",
@@ -280,11 +286,14 @@ async function deleteKey(id: string, opts: KeyOpts): Promise<void> {
   const c = client;
   const projectId = getActiveProjectId(opts.project);
 
-  const keys = await c.request<ApiKeyDTO[]>("/api/keys", { projectId });
-  const existing = keys.find((k) => k.id === id);
-  if (!existing) {
-    throw new ApiError(`No key with id "${id}".`, 404, undefined);
-  }
+  const existing = await c
+    .request<ApiKeyDTO>(`/api/keys/${encodeURIComponent(id)}`, { projectId })
+    .catch((err) => {
+      if (err instanceof ApiError && err.status === 404) {
+        throw new ApiError(`No key with id "${id}".`, 404, undefined);
+      }
+      throw err;
+    });
 
   if (!opts.force && !opts.json) {
     const ok = await confirm({
