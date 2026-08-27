@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { resolve } from "node:path";
 import { client } from "../http";
-import { getConfigValue } from "../config";
+import { getConfigValue, getActiveProjectId, type GlobalOptions } from "../config";
 import { revealKey, type ApiKeyDTO } from "./keys";
 import {
   buildEnvContent,
@@ -12,7 +12,7 @@ import {
 import { restoreDotenvFiles } from "../run-env";
 import { printJson, printSuccess, dim, yellow, reportError } from "../ui/format";
 
-interface ExportOpts {
+interface ExportOpts extends GlobalOptions {
   env?: string;
   output?: string;
   vaultKey?: string;
@@ -35,11 +35,12 @@ async function exportEnv(opts: ExportOpts, json: boolean): Promise<void> {
     );
   }
 
+  const projectId = getActiveProjectId(opts.project);
   const output = (opts.output ?? ".env").trim() || ".env";
 
   const params = new URLSearchParams();
   params.set("environment", env);
-  const keys = await client.request<ApiKeyDTO[]>(`/api/keys?${params.toString()}`);
+  const keys = await client.request<ApiKeyDTO[]>(`/api/keys?${params.toString()}`, { projectId });
 
   if (!keys || keys.length === 0) {
     throw new Error(`No keys found for environment "${env}".`);
@@ -47,7 +48,7 @@ async function exportEnv(opts: ExportOpts, json: boolean): Promise<void> {
 
   const secrets: Record<string, string> = {};
   for (const k of keys) {
-    secrets[k.name] = await revealKey(client, k.id, opts.vaultKey);
+    secrets[k.name] = await revealKey(client, k.id, opts.vaultKey, projectId);
   }
 
   const existing = opts.force ? "" : readEnvFile(output);
@@ -101,7 +102,8 @@ async function restoreEnv(opts: RestoreOpts, json: boolean): Promise<void> {
 
 /** Register the `env` command group on the parent program. */
 export function registerEnvCommand(program: Command): void {
-  const json = () => Boolean(program.opts().json);
+  const globals = () => program.opts() as GlobalOptions;
+  const json = () => Boolean(globals().json);
   const handle = (err: unknown) => {
     reportError(err, json());
     process.exitCode = 1;
@@ -121,7 +123,7 @@ export function registerEnvCommand(program: Command): void {
       "Vault key for custom-mode accounts (or set APIVAULT_KEY)",
     )
     .option("-f, --force", "Replace the file instead of merging with existing variables")
-    .action(async (opts: ExportOpts) => exportEnv(opts, json()).catch(handle));
+    .action(async (opts: ExportOpts) => exportEnv({ ...globals(), ...opts }, json()).catch(handle));
 
   env
     .command("restore")

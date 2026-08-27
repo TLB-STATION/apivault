@@ -4,6 +4,7 @@ import { registerKeysCommand } from "./commands/keys";
 import { registerRunCommand } from "./commands/run";
 import { registerConfigCommand } from "./commands/config";
 import { registerEnvCommand } from "./commands/env";
+import { registerProjectsCommand } from "./commands/projects";
 import { reportError } from "./ui/format";
 import { readToken } from "./config";
 import pkg from "../package.json";
@@ -15,6 +16,7 @@ program
   .description(pkg.description)
   .version(pkg.version)
   .option("--json", "Emit machine-readable JSON output")
+  .option("-p, --project <id>", "Target project ID or slug")
   .option(
     "--timeout <seconds>",
     "Seconds to wait for browser approval during login",
@@ -65,6 +67,7 @@ registerKeysCommand(program);
 registerRunCommand(program);
 registerConfigCommand(program);
 registerEnvCommand(program);
+registerProjectsCommand(program);
 
 // When invoked with no arguments at all, print a short status hint. Any
 // unrecognized command is left to commander, which exits non-zero with a

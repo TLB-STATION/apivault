@@ -16,7 +16,7 @@ const SECRET_KEYS = new Set(["vaultKey"]);
  * Config keys `set` will accept. Prevents typos (e.g. `vaultkeys`) from
  * silently creating entries that the rest of the CLI never reads.
  */
-const KNOWN_CONFIG_KEYS = ["run.command", "run.env", "vaultKey"] as const;
+const KNOWN_CONFIG_KEYS = ["run.command", "run.env", "vaultKey", "project"] as const;
 
 /** Suggest known keys close to a typoed one (case-insensitive containment). */
 function suggestKeys(typed: string): string[] {

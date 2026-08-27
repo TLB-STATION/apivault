@@ -15,6 +15,8 @@ export interface GlobalOptions {
   json?: boolean;
   /** Maximum seconds to wait for browser approval during login. */
   timeout?: number;
+  /** Explicitly override the project context via flag. */
+  project?: string;
 }
 
 const DATA_DIR = join(homedir(), ".apivault");
@@ -83,6 +85,7 @@ export interface StoredConfig {
     env?: string;
   };
   vaultKey?: string;
+  project?: string;
   [key: string]: unknown;
 }
 
@@ -96,6 +99,48 @@ export function readConfig(): StoredConfig {
   } catch {
     return {};
   }
+}
+
+/** Check for a local project binding (e.g. .apivaultrc or apivault.json) in the current directory. */
+export function getLocalProject(): string | undefined {
+  const cwd = process.cwd();
+  const localPaths = [
+    join(cwd, ".apivaultrc"),
+    join(cwd, "apivault.json"),
+    join(cwd, ".apivault")
+  ];
+  
+  for (const p of localPaths) {
+    if (existsSync(p)) {
+      try {
+        const raw = readFileSync(p, "utf8");
+        // Try parsing as JSON first (e.g. {"project": "pid"})
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed.project === "string") return parsed.project;
+          if (parsed && typeof parsed.projectId === "string") return parsed.projectId;
+        } catch {
+          // Fallback: treat file content directly as the string project ID
+          const trimmed = raw.trim();
+          if (trimmed.length > 0) return trimmed;
+        }
+      } catch {
+        // Ignore read errors
+      }
+    }
+  }
+  return undefined;
+}
+
+/** 
+ * Resolve the active project ID.
+ * Priority: 1. CLI flag (-p) 2. Local directory binding 3. Global config
+ */
+export function getActiveProjectId(cliFlag?: string): string | undefined {
+  if (cliFlag) return cliFlag;
+  const local = getLocalProject();
+  if (local) return local;
+  return getConfigValue("project");
 }
 
 /** Persist the config. File mode is restricted to 0600 on Unix (owner-only). */

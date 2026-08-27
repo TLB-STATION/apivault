@@ -4,11 +4,11 @@ import spawn from "cross-spawn";
 import { Command } from "commander";
 import { client } from "../http";
 import { revealKey, type ApiKeyDTO } from "./keys";
-import { getConfigValue } from "../config";
+import { getConfigValue, getActiveProjectId, type GlobalOptions } from "../config";
 import { buildRunEnv, hideDotenvFiles, restoreDotenvFiles } from "../run-env";
 import { green, dim, yellow, reportError } from "../ui/format";
 
-interface RunOpts {
+interface RunOpts extends GlobalOptions {
   /** Environment to load secrets from. Falls back to config `run.env`. */
   env?: string;
   /** Vault key for custom-mode accounts. */
@@ -64,11 +64,12 @@ async function runCommand(opts: RunOpts, commandAndArgs: string[]): Promise<void
   }
 
   const c = client;
+  const projectId = getActiveProjectId(opts.project);
 
   // 1. Fetch keys filtered by environment (server-side).
   const params = new URLSearchParams();
   params.set("environment", env);
-  const keys = await c.request<ApiKeyDTO[]>(`/api/keys?${params.toString()}`);
+  const keys = await c.request<ApiKeyDTO[]>(`/api/keys?${params.toString()}`, { projectId });
 
   const envOverlay: Record<string, string> = {};
 
@@ -80,7 +81,7 @@ async function runCommand(opts: RunOpts, commandAndArgs: string[]): Promise<void
   } else {
     // 2. Decrypt each key and build the env overlay.
     for (const k of keys) {
-      const rawValue = await revealKey(c, k.id, opts.vaultKey);
+      const rawValue = await revealKey(c, k.id, opts.vaultKey, projectId);
       envOverlay[k.name] = rawValue;
     }
 
@@ -190,7 +191,8 @@ export function registerRunCommand(program: Command): void {
       "Vault key for custom-mode accounts (or set APIVAULT_KEY)",
     )
     .allowUnknownOption(true)
-    .action(async (opts: RunOpts, cmd: Command) => {
+    .action(async (localOpts: RunOpts, cmd: Command) => {
+      const opts = { ...(program.opts() as GlobalOptions), ...localOpts };
       // Prefer an explicit `--` separator, which survives option parsing
       // everywhere. Fall back to Commander's remaining operands for shells
       // (e.g. PowerShell) that strip `--` before native commands see it.

@@ -77,6 +77,8 @@ Installs into `~/.local/share/apivault` and links `~/.local/bin/apivault` — no
 | `apivault keys get <id>` | View key details; add `--reveal` to decrypt |
 | `apivault keys update <id>` | Edit a stored key |
 | `apivault keys delete <id>` | Delete a key (`-f` to skip prompt) |
+| `apivault projects list` | List all available projects |
+| `apivault projects use <id>` | Set a default project context globally |
 | `apivault run` | Inject secrets into a child process |
 | `apivault env export` | Write secrets to a `.env` file |
 | `apivault env restore` | Restore `.env` files hidden by `run` |
@@ -100,6 +102,21 @@ apivault login
 apivault whoami                    # check connection status
 apivault logout                    # revoke this device's token
 ```
+
+---
+
+## Managing Projects
+
+```bash
+apivault projects list             # list all available projects
+apivault projects use <id>         # set the default project in your global config
+```
+
+For commands that require a project context, the CLI resolves the active project in this order:
+1. `--project <id>` or `-p <id>` flag (available on all commands)
+2. Local directory binding: create an `.apivaultrc` or `apivault.json` file in your repository containing just your project ID.
+3. Global default project (`apivault projects use <id>`)
+4. Server fallback (uses the user's first created project)
 
 ---
 

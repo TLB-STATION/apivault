@@ -31,6 +31,8 @@ export interface RequestOpts {
   noAuth?: boolean;
   /** Extra headers (e.g. X-Vault-Key for custom-mode decrypts). */
   headers?: Record<string, string>;
+  /** The target project ID, sent as X-Project-Id. */
+  projectId?: string;
 }
 
 /**
@@ -52,6 +54,10 @@ export class ApiClient {
 
     if (opts.json !== undefined) {
       headers["Content-Type"] = "application/json";
+    }
+
+    if (opts.projectId) {
+      headers["X-Project-Id"] = opts.projectId;
     }
 
     const token = opts.noAuth ? undefined : opts.token ?? readToken();

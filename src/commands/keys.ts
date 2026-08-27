@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { input, password, confirm } from "@inquirer/prompts";
 import { ApiError, client } from "../http";
-import { type GlobalOptions, getConfigValue } from "../config";
+import { type GlobalOptions, getConfigValue, getActiveProjectId } from "../config";
 import {
   renderKeysTable,
   renderKeyDetail,
@@ -47,7 +47,7 @@ interface AddKeyFields {
 /** apivault keys list */
 async function listKeys(opts: KeyOpts): Promise<void> {
   const c = client;
-  const keys = await c.request<ApiKeyDTO[]>("/api/keys");
+  const keys = await c.request<ApiKeyDTO[]>("/api/keys", { projectId: getActiveProjectId(opts.project) });
   if (opts.json) {
     printJson(keys);
     return;
@@ -62,9 +62,10 @@ async function listKeys(opts: KeyOpts): Promise<void> {
 /** apivault keys get <id> [--reveal] */
 async function getKey(id: string, opts: KeyOpts): Promise<void> {
   const c = client;
+  const projectId = getActiveProjectId(opts.project);
 
   // The list endpoint gives us the masked view; find the matching key.
-  const keys = await c.request<ApiKeyDTO[]>("/api/keys");
+  const keys = await c.request<ApiKeyDTO[]>("/api/keys", { projectId });
   const key = keys.find((k) => k.id === id);
   if (!key) {
     throw new ApiError(`No key with id "${id}".`, 404, undefined);
@@ -72,7 +73,7 @@ async function getKey(id: string, opts: KeyOpts): Promise<void> {
 
   let rawKey: string | undefined;
   if (opts.reveal) {
-    rawKey = await revealKey(c, id, opts.vaultKey);
+    rawKey = await revealKey(c, id, opts.vaultKey, projectId);
   }
 
   if (opts.json) {
@@ -141,13 +142,17 @@ export async function revealKey(
   c: typeof client,
   id: string,
   keyFlag?: string,
+  projectId?: string,
 ): Promise<string> {
-  const decrypted = await withVaultKey(keyFlag, (headers) =>
-    c.request<{ rawKey?: string; error?: string }>(
-      `/api/keys/${encodeURIComponent(id)}/decrypt`,
-      { method: "POST", headers },
-    ),
-  );
+  const decrypted = await withVaultKey(keyFlag, (headers) => {
+    const url = projectId
+      ? `/api/keys/${encodeURIComponent(id)}/decrypt?projectId=${projectId}`
+      : `/api/keys/${encodeURIComponent(id)}/decrypt`;
+    return c.request<{ rawKey?: string; error?: string }>(
+      url,
+      { method: "POST", headers, projectId },
+    );
+  });
   if (!decrypted?.rawKey) throw new ApiError("Could not decrypt that key.", 500, decrypted);
   return decrypted.rawKey;
 }
@@ -155,6 +160,7 @@ export async function revealKey(
 /** apivault keys add — interactive, or fully via flags for scripting. */
 async function addKey(opts: KeyOpts & AddKeyFields): Promise<void> {
   const c = client;
+  const projectId = getActiveProjectId(opts.project);
 
   const name = (
     opts.name?.trim() ||
@@ -188,6 +194,7 @@ async function addKey(opts: KeyOpts & AddKeyFields): Promise<void> {
     c.request<ApiKeyDTO>("/api/keys", {
       method: "POST",
       headers,
+      projectId,
       json: {
         name,
         service,
@@ -208,8 +215,9 @@ async function addKey(opts: KeyOpts & AddKeyFields): Promise<void> {
 /** apivault keys update <id> (interactive) */
 async function updateKey(id: string, opts: KeyOpts): Promise<void> {
   const c = client;
+  const projectId = getActiveProjectId(opts.project);
 
-  const keys = await c.request<ApiKeyDTO[]>("/api/keys");
+  const keys = await c.request<ApiKeyDTO[]>("/api/keys", { projectId });
   const existing = keys.find((k) => k.id === id);
   if (!existing) {
     throw new ApiError(`No key with id "${id}".`, 404, undefined);
@@ -249,6 +257,7 @@ async function updateKey(id: string, opts: KeyOpts): Promise<void> {
     c.request<ApiKeyDTO>(`/api/keys/${encodeURIComponent(id)}`, {
       method: "PUT",
       headers,
+      projectId,
       json: {
         name: name.trim(),
         service: service.trim(),
@@ -269,8 +278,9 @@ async function updateKey(id: string, opts: KeyOpts): Promise<void> {
 /** apivault keys delete <id> */
 async function deleteKey(id: string, opts: KeyOpts): Promise<void> {
   const c = client;
+  const projectId = getActiveProjectId(opts.project);
 
-  const keys = await c.request<ApiKeyDTO[]>("/api/keys");
+  const keys = await c.request<ApiKeyDTO[]>("/api/keys", { projectId });
   const existing = keys.find((k) => k.id === id);
   if (!existing) {
     throw new ApiError(`No key with id "${id}".`, 404, undefined);
@@ -289,6 +299,7 @@ async function deleteKey(id: string, opts: KeyOpts): Promise<void> {
 
   await c.request<{ success?: boolean }>(`/api/keys/${encodeURIComponent(id)}`, {
     method: "DELETE",
+    projectId,
   });
 
   if (opts.json) {
