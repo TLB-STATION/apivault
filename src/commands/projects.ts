@@ -2,7 +2,6 @@ import { Command } from "commander";
 import { ApiClient } from "../http";
 import { setConfigValue, type GlobalOptions } from "../config";
 import { printJson, printSuccess, dim, green, reportError } from "../ui/format";
-// @ts-expect-error - cli-table3 types can be finicky depending on environment
 import Table from "cli-table3";
 
 interface ProjectItem {

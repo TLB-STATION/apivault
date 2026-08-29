@@ -50,7 +50,11 @@ export class ApiClient {
   /** Issue a request. */
   async request<T = unknown>(path: string, opts: RequestOpts = {}): Promise<T> {
     const url = this.absolute(path);
-    const headers: Record<string, string> = { Accept: "application/json", ...opts.headers };
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "User-Agent": "apivault-cli/1.3.2",
+      ...opts.headers,
+    };
 
     if (opts.json !== undefined) {
       headers["Content-Type"] = "application/json";

@@ -63,9 +63,10 @@ async function listKeys(opts: KeyOpts): Promise<void> {
 async function getKey(id: string, opts: KeyOpts): Promise<void> {
   const c = client;
   const projectId = getActiveProjectId(opts.project);
-
-  // Fetch the specific masked key.
-  const key = await c
+  const revealed = opts.reveal
+    ? await revealKeyDetails(c, id, opts.vaultKey, projectId)
+    : undefined;
+  const key = revealed ?? await c
     .request<ApiKeyDTO>(`/api/keys/${encodeURIComponent(id)}`, { projectId })
     .catch((err) => {
       if (err instanceof ApiError && err.status === 404) {
@@ -73,11 +74,7 @@ async function getKey(id: string, opts: KeyOpts): Promise<void> {
       }
       throw err;
     });
-
-  let rawKey: string | undefined;
-  if (opts.reveal) {
-    rawKey = await revealKey(c, id, opts.vaultKey, projectId);
-  }
+  const rawKey = revealed?.rawKey;
 
   if (opts.json) {
     printJson({ ...key, ...(rawKey ? { rawKey } : {}) });
@@ -147,17 +144,26 @@ export async function revealKey(
   keyFlag?: string,
   projectId?: string,
 ): Promise<string> {
+  return (await revealKeyDetails(c, id, keyFlag, projectId)).rawKey;
+}
+
+async function revealKeyDetails(
+  c: typeof client,
+  id: string,
+  keyFlag?: string,
+  projectId?: string,
+): Promise<ApiKeyDTO & { rawKey: string }> {
   const decrypted = await withVaultKey(keyFlag, (headers) => {
     const url = projectId
       ? `/api/keys/${encodeURIComponent(id)}/decrypt?projectId=${projectId}`
       : `/api/keys/${encodeURIComponent(id)}/decrypt`;
-    return c.request<{ rawKey?: string; error?: string }>(
+    return c.request<ApiKeyDTO & { rawKey?: string; error?: string }>(
       url,
       { method: "POST", headers, projectId },
     );
   });
   if (!decrypted?.rawKey) throw new ApiError("Could not decrypt that key.", 500, decrypted);
-  return decrypted.rawKey;
+  return decrypted as ApiKeyDTO & { rawKey: string };
 }
 
 /** apivault keys add — interactive, or fully via flags for scripting. */
