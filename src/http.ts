@@ -1,4 +1,5 @@
 import { API_BASE_URL, readToken } from "./config";
+import pkg from "../package.json";
 
 /** Error wrapper carrying the HTTP status, parsed body, and machine code. */
 export class ApiError extends Error {
@@ -52,7 +53,7 @@ export class ApiClient {
     const url = this.absolute(path);
     const headers: Record<string, string> = {
       Accept: "application/json",
-      "User-Agent": "apivault-cli/1.3.2",
+      "User-Agent": `apivault-cli/${pkg.version}`,
       ...opts.headers,
     };
 

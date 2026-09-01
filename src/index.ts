@@ -61,6 +61,48 @@ program
     }
   });
 
+program
+  .command("link <id>")
+  .description("Link current directory to an ApiVault project (.apivault.json)")
+  .action(async (id: string) => {
+    try {
+      const { setConfigValue } = await import("./config");
+      const { printJson, printSuccess, green, cyan } = await import("./ui/format");
+      const result = setConfigValue("project", id, { scope: "local" });
+      if (Boolean(program.opts().json)) {
+        printJson({ project: id, scope: "local", file: result.targetPath, set: true });
+        return;
+      }
+      printSuccess(`Linked current directory to project ${green(id)} ${cyan(`(${result.targetPath})`)}.`);
+    } catch (err) {
+      reportError(err, Boolean(program.opts().json));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("unlink")
+  .description("Remove local project binding (.apivault.json) from current directory")
+  .action(async () => {
+    try {
+      const { unlinkLocalProject } = await import("./config");
+      const { printJson, printSuccess, dim } = await import("./ui/format");
+      const unlinked = unlinkLocalProject();
+      if (Boolean(program.opts().json)) {
+        printJson({ unlinked });
+        return;
+      }
+      if (unlinked) {
+        printSuccess("Removed local project configuration (.apivault.json).");
+      } else {
+        process.stdout.write(dim("No local project configuration found in this directory.\n"));
+      }
+    } catch (err) {
+      reportError(err, Boolean(program.opts().json));
+      process.exitCode = 1;
+    }
+  });
+
 // Subcommand groups ---------------------------------------------------------
 
 registerKeysCommand(program);

@@ -72,19 +72,22 @@ Installs into `~/.local/share/apivault` and links `~/.local/bin/apivault` — no
 | `apivault login` | Authenticate via browser approval |
 | `apivault logout` | Revoke session and clear stored token |
 | `apivault whoami` | Show the connected user |
+| `apivault link <id>` | Link current directory to an ApiVault project (`.apivault.json`) |
+| `apivault unlink` | Remove local project binding (`.apivault.json`) |
 | `apivault keys list` | List all vault keys (masked) |
 | `apivault keys add` | Add a new secret (interactive or flags) |
 | `apivault keys get <id>` | View key details; add `--reveal` to decrypt |
 | `apivault keys update <id>` | Edit a stored key |
 | `apivault keys delete <id>` | Delete a key (`-f` to skip prompt) |
 | `apivault projects list` | List all available projects |
-| `apivault projects use <id>` | Set a default project context globally |
+| `apivault projects use <id>` | Set active project locally (`.apivault.json`, or `--global`) |
+| `apivault projects current` | Display currently active project and its source |
 | `apivault run` | Inject secrets into a child process |
 | `apivault env export` | Write secrets to a `.env` file |
 | `apivault env restore` | Restore `.env` files hidden by `run` |
-| `apivault config list\|get\|set\|delete` | Manage local CLI defaults |
+| `apivault config list\|get\|set\|delete` | Manage local & global CLI defaults (`-l` / `-g`) |
 
-**Global flags:** `--json` (machine-readable output), `--timeout <seconds>` (browser approval wait, default 300).
+**Global flags:** `--json` (machine-readable output), `--timeout <seconds>` (browser approval wait, default 300), `-p, --project <id>` (explicit project override).
 
 ---
 
@@ -105,18 +108,22 @@ apivault logout                    # revoke this device's token
 
 ---
 
-## Managing Projects
+## Managing Projects & Local Directory Bindings
 
 ```bash
 apivault projects list             # list all available projects
-apivault projects use <id>         # set the default project in your global config
+apivault projects use <id>         # bind current directory to a project (.apivault.json)
+apivault link <id>                 # shortcut to bind current directory
+apivault projects current          # check active project and resolution source
+apivault unlink                    # remove local project binding
 ```
 
 For commands that require a project context, the CLI resolves the active project in this order:
 1. `--project <id>` or `-p <id>` flag (available on all commands)
-2. Local directory binding: create an `.apivaultrc` or `apivault.json` file in your repository containing just your project ID.
-3. Global default project (`apivault projects use <id>`)
-4. Server fallback (uses the user's first created project)
+2. `APIVAULT_PROJECT` environment variable
+3. Local directory configuration (`.apivault.json`, `.apivaultrc`, `apivault.json`)
+4. Global default project (`apivault projects use <id> --global` or `~/.apivault/config.json`)
+
 
 ---
 
@@ -211,20 +218,24 @@ apivault env restore -C /path/to/project    # specify project directory
 
 ---
 
-## Local Configuration
-
-Manage CLI defaults stored in `~/.apivault/config.json`:
-
+## Local & Global Configuration
+ 
+Manage CLI defaults stored per-project in `.apivault.json` or globally in `~/.apivault/config.json`:
+ 
 ```bash
-apivault config list                       # view all (vaultKey is masked)
-apivault config get run.command            # read a value
-apivault config set run.env Production     # set default environment
-apivault config set run.command "npm start" # set default command
+apivault config list                       # view active merged config (shows local vs global)
+apivault config list --local               # view only local project config
+apivault config list --global              # view only global user config
+apivault config get run.command            # read a resolved value
+apivault config set --local run.env Dev    # set local project default environment
+apivault config set --local run.command "npm run dev"
+apivault config set --global run.env Prod  # set global default environment
 apivault config set vaultKey               # save vault key (hidden input)
-apivault config delete run.env             # remove a value
+apivault config delete --local run.env     # remove a local value
 ```
 
-Known keys: `run.command`, `run.env`, `vaultKey`. Explicit flags always take precedence.
+Known keys: `project`, `run.command`, `run.env`, `vaultKey`. Explicit flags and local configs always take precedence.
+
 
 ---
 

@@ -76,9 +76,9 @@ export function clearToken(): void {
   }
 }
 
-// --- Local config (defaults for `run`, stored vault key, etc.) -------------
+// --- Local and Global config (defaults for `run`, stored vault key, etc.) ---
 
-/** Shape of ~/.apivault/config.json. Unknown keys are preserved as-is. */
+/** Shape of config JSON. Unknown keys are preserved as-is. */
 export interface StoredConfig {
   run?: {
     command?: string;
@@ -86,11 +86,14 @@ export interface StoredConfig {
   };
   vaultKey?: string;
   project?: string;
+  projectId?: string;
   [key: string]: unknown;
 }
 
-/** Read the persisted config, or an empty object if none exists. */
-export function readConfig(): StoredConfig {
+export type ConfigScope = "all" | "local" | "global";
+
+/** Read the persisted global config (~/.apivault/config.json). */
+export function readGlobalConfig(): StoredConfig {
   try {
     if (!existsSync(CONFIG_PATH)) return {};
     const raw = readFileSync(CONFIG_PATH, "utf8");
@@ -101,50 +104,11 @@ export function readConfig(): StoredConfig {
   }
 }
 
-/** Check for a local project binding (e.g. .apivaultrc or apivault.json) in the current directory. */
-export function getLocalProject(): string | undefined {
-  const cwd = process.cwd();
-  const localPaths = [
-    join(cwd, ".apivaultrc"),
-    join(cwd, "apivault.json"),
-    join(cwd, ".apivault")
-  ];
-  
-  for (const p of localPaths) {
-    if (existsSync(p)) {
-      try {
-        const raw = readFileSync(p, "utf8");
-        // Try parsing as JSON first (e.g. {"project": "pid"})
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed.project === "string") return parsed.project;
-          if (parsed && typeof parsed.projectId === "string") return parsed.projectId;
-        } catch {
-          // Fallback: treat file content directly as the string project ID
-          const trimmed = raw.trim();
-          if (trimmed.length > 0) return trimmed;
-        }
-      } catch {
-        // Ignore read errors
-      }
-    }
-  }
-  return undefined;
-}
+/** Alias for backwards compatibility. */
+export const readConfig = readGlobalConfig;
 
-/** 
- * Resolve the active project ID.
- * Priority: 1. CLI flag (-p) 2. Local directory binding 3. Global config
- */
-export function getActiveProjectId(cliFlag?: string): string | undefined {
-  if (cliFlag) return cliFlag;
-  const local = getLocalProject();
-  if (local) return local;
-  return getConfigValue("project");
-}
-
-/** Persist the config. File mode is restricted to 0600 on Unix (owner-only). */
-export function writeConfig(config: StoredConfig): void {
+/** Persist global config to ~/.apivault/config.json. */
+export function writeGlobalConfig(config: StoredConfig): void {
   ensureDataDir();
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), "utf8");
   if (process.platform !== "win32") {
@@ -156,12 +120,99 @@ export function writeConfig(config: StoredConfig): void {
   }
 }
 
+/** Alias for backwards compatibility. */
+export const writeConfig = writeGlobalConfig;
+
+const LOCAL_CONFIG_CANDIDATES = [
+  ".apivault.json",
+  ".apivaultrc",
+  "apivault.json",
+  ".apivault",
+];
+
+/** Locate any existing local project config file in the given (or current) directory. */
+export function findLocalConfigFile(cwd: string = process.cwd()): string | null {
+  for (const name of LOCAL_CONFIG_CANDIDATES) {
+    const fullPath = join(cwd, name);
+    if (existsSync(fullPath)) return fullPath;
+  }
+  return null;
+}
+
+/** Read local project config from current directory, if present. */
+export function readLocalConfig(cwd: string = process.cwd()): { config: StoredConfig; filePath: string | null } {
+  const filePath = findLocalConfigFile(cwd);
+  if (!filePath) return { config: {}, filePath: null };
+
+  try {
+    const raw = readFileSync(filePath, "utf8");
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        return { config: parsed as StoredConfig, filePath };
+      }
+    } catch {
+      // If raw file content is just a plain project ID string (like .apivault)
+      const trimmed = raw.trim();
+      if (trimmed.length > 0) {
+        return { config: { project: trimmed }, filePath };
+      }
+    }
+  } catch {
+    // Ignore read errors
+  }
+  return { config: {}, filePath: null };
+}
+
 /**
- * Get a nested config value by dot path (e.g. "run.command", "vaultKey").
- * Returns undefined if the path or any ancestor is missing.
+ * Write to local project config in the given (or current) directory.
+ * Writes to existing local config file if one exists, otherwise creates `.apivault.json`.
  */
-export function getConfigValue(path: string): string | undefined {
-  const config = readConfig();
+export function writeLocalConfig(config: StoredConfig, cwd: string = process.cwd()): string {
+  const targetPath = findLocalConfigFile(cwd) || join(cwd, ".apivault.json");
+  writeFileSync(targetPath, JSON.stringify(config, null, 2), "utf8");
+  return targetPath;
+}
+
+/** Remove the local project configuration file in the current directory. */
+export function unlinkLocalProject(cwd: string = process.cwd()): boolean {
+  const targetPath = findLocalConfigFile(cwd);
+  if (targetPath && existsSync(targetPath)) {
+    try {
+      unlinkSync(targetPath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/** Check for a local project binding in the current directory. */
+export function getLocalProject(): string | undefined {
+  const { config } = readLocalConfig();
+  if (typeof config.project === "string" && config.project.trim()) {
+    return config.project.trim();
+  }
+  if (typeof config.projectId === "string" && config.projectId.trim()) {
+    return config.projectId.trim();
+  }
+  return undefined;
+}
+
+/** 
+ * Resolve the active project ID.
+ * Priority: 1. CLI flag (-p) 2. Environment variable (APIVAULT_PROJECT) 3. Local directory config 4. Global config
+ */
+export function getActiveProjectId(cliFlag?: string): string | undefined {
+  if (cliFlag?.trim()) return cliFlag.trim();
+  if (process.env.APIVAULT_PROJECT?.trim()) return process.env.APIVAULT_PROJECT.trim();
+  const local = getLocalProject();
+  if (local) return local;
+  return getConfigValue("project", { scope: "global" });
+}
+
+function extractNestedValue(config: StoredConfig, path: string): string | undefined {
   const segments = path.split(".");
   let node: unknown = config;
   for (const seg of segments) {
@@ -174,14 +225,10 @@ export function getConfigValue(path: string): string | undefined {
   return typeof node === "string" ? node : undefined;
 }
 
-/**
- * Set a nested config value by dot path, creating intermediate objects as
- * needed, and persist the result.
- */
-export function setConfigValue(path: string, value: string): void {
-  const config = readConfig();
+function setNestedValue(config: StoredConfig, path: string, value: string): StoredConfig {
+  const updated = { ...config };
   const segments = path.split(".");
-  let node: Record<string, unknown> = config;
+  let node: Record<string, unknown> = updated;
   for (let i = 0; i < segments.length - 1; i++) {
     const seg = segments[i];
     if (typeof node[seg] !== "object" || node[seg] === null) {
@@ -190,31 +237,108 @@ export function setConfigValue(path: string, value: string): void {
     node = node[seg] as Record<string, unknown>;
   }
   node[segments[segments.length - 1]] = value;
-  writeConfig(config);
+  return updated;
 }
 
-/**
- * Delete a nested config value by dot path. Returns true if it existed.
- * Does not write if the path was absent.
- */
-export function deleteConfigValue(path: string): boolean {
-  const config = readConfig();
+function deleteNestedValue(config: StoredConfig, path: string): { updated: StoredConfig; deleted: boolean } {
+  const updated = { ...config };
   const segments = path.split(".");
-  let node: unknown = config;
+  let node: unknown = updated;
   for (let i = 0; i < segments.length - 1; i++) {
     const seg = segments[i];
     if (node && typeof node === "object" && seg in (node as Record<string, unknown>)) {
       node = (node as Record<string, unknown>)[seg];
     } else {
-      return false;
+      return { updated, deleted: false };
     }
   }
   const last = segments[segments.length - 1];
   const leaf = node as Record<string, unknown>;
   if (node && typeof node === "object" && last in leaf) {
     delete leaf[last];
-    writeConfig(config);
-    return true;
+    return { updated, deleted: true };
   }
-  return false;
+  return { updated, deleted: false };
+}
+
+/**
+ * Get a nested config value by dot path (e.g. "run.command", "vaultKey", "project").
+ * Checks local config first (unless scope is 'global'), then global config (unless scope is 'local').
+ */
+export function getConfigValue(
+  path: string,
+  options?: { scope?: ConfigScope },
+): string | undefined {
+  const scope = options?.scope ?? "all";
+
+  if (scope === "local" || scope === "all") {
+    const { config: localConfig } = readLocalConfig();
+    const localVal = extractNestedValue(localConfig, path);
+    if (localVal !== undefined) return localVal;
+  }
+
+  if (scope === "global" || scope === "all") {
+    const globalConfig = readGlobalConfig();
+    const globalVal = extractNestedValue(globalConfig, path);
+    if (globalVal !== undefined) return globalVal;
+  }
+
+  return undefined;
+}
+
+/**
+ * Set a nested config value by dot path.
+ * Scope determines whether it is written to local directory config (`.apivault.json`) or global config.
+ */
+export function setConfigValue(
+  path: string,
+  value: string,
+  options?: { scope?: "local" | "global" },
+): { scope: "local" | "global"; targetPath: string } {
+  const scope = options?.scope ?? "global";
+  if (scope === "local") {
+    const { config: localConfig } = readLocalConfig();
+    const updated = setNestedValue(localConfig, path, value);
+    const targetPath = writeLocalConfig(updated);
+    return { scope: "local", targetPath };
+  } else {
+    const globalConfig = readGlobalConfig();
+    const updated = setNestedValue(globalConfig, path, value);
+    writeGlobalConfig(updated);
+    return { scope: "global", targetPath: CONFIG_PATH };
+  }
+}
+
+/**
+ * Delete a nested config value by dot path.
+ */
+export function deleteConfigValue(
+  path: string,
+  options?: { scope?: "local" | "global" | "all" },
+): { deletedLocal: boolean; deletedGlobal: boolean } {
+  const scope = options?.scope ?? "all";
+  let deletedLocal = false;
+  let deletedGlobal = false;
+
+  if (scope === "local" || scope === "all") {
+    const { config: localConfig, filePath } = readLocalConfig();
+    if (filePath) {
+      const { updated, deleted } = deleteNestedValue(localConfig, path);
+      if (deleted) {
+        writeLocalConfig(updated);
+        deletedLocal = true;
+      }
+    }
+  }
+
+  if (scope === "global" || scope === "all") {
+    const globalConfig = readGlobalConfig();
+    const { updated, deleted } = deleteNestedValue(globalConfig, path);
+    if (deleted) {
+      writeGlobalConfig(updated);
+      deletedGlobal = true;
+    }
+  }
+
+  return { deletedLocal, deletedGlobal };
 }
