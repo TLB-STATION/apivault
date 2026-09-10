@@ -86,6 +86,9 @@ Installs into `~/.local/share/apivault` and links `~/.local/bin/apivault` — no
 | `apivault env export` | Write secrets to a `.env` file |
 | `apivault env restore` | Restore `.env` files hidden by `run` |
 | `apivault config list\|get\|set\|delete` | Manage local & global CLI defaults (`-l` / `-g`) |
+| `apivault logs` | List a project's audit and request logs |
+| `apivault logs tail` | Stream new log entries as they arrive |
+| `apivault logs get <id>` | Inspect one log entry in full |
 
 **Global flags:** `--json` (machine-readable output), `--timeout <seconds>` (browser approval wait, default 300), `-p, --project <id|slug>` (explicit project override), `-V, --version`, `-h, --help`.
 
@@ -257,6 +260,58 @@ apivault config delete --local run.env     # remove a local value
 
 Known keys: `project`, `run.command`, `run.env`, `vaultKey`. Explicit flags and local configs always take precedence.
 
+
+---
+
+## Audit & Request Logs (`apivault logs`)
+
+Every request against a project — from the web app, the CLI, or an MCP agent — is recorded with
+its status, actor, and duration. `apivault logs` reads that history without leaving the terminal.
+
+```bash
+# Most recent entries for the active project
+apivault logs
+
+# Narrow it down
+apivault logs --status error --source mcp
+apivault logs --status 404 --method POST
+apivault logs --event-type KEY_REVEALED --date 2026-09-01 --end-date 2026-09-10
+apivault logs --search "/api/keys" -n 100
+
+# Follow new entries as they arrive (Ctrl+C to stop)
+apivault logs --follow
+apivault logs tail --source cli
+
+# Inspect one entry in full, including its details payload
+apivault logs get <log-id>
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `-n, --limit <n>` | Entries to fetch (default 50, max 1000) |
+| `--page <n>` | Page through results (default 1) |
+| `-f, --follow` | Stream new entries in real time |
+| `--status <s>` | `success`, `error`, or an HTTP code such as `200` / `404`. Repeatable |
+| `--source <s>` | `cli`, `mcp`, `web`, or `api` |
+| `--method <m>` | `GET`, `POST`, `PUT`, `DELETE` |
+| `--event-type <t>` | e.g. `KEY_REVEALED`, `KEY_ROTATED`, `KEY_CREATED` |
+| `--user <userId>` | Restrict to one actor |
+| `--key <idOrName>` | Entries touching one stored key |
+| `--date` / `--end-date` | `YYYY-MM-DD` bounds |
+| `--search <query>` | Matches log ID, endpoint, method, source, IP, event type, or actor |
+
+`apivault logs get <id>` accepts an ID prefix, so the shortened ID shown in a table is enough.
+
+With `--json`, `logs` prints the full response object (entries plus pagination), while `--follow`
+emits one JSON object per line as entries arrive, suitable for piping into a log forwarder:
+
+```bash
+apivault --json logs -f | jq -c '{t: .createdAt, s: .status, e: .endpoint}'
+```
+
+A `--follow` stream rides out transient network errors, but stops and reports if the token has
+expired or been revoked, the project became inaccessible, or a filter was rejected — so a broken
+stream is never mistaken for a quiet one.
 
 ---
 

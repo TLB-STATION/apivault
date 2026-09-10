@@ -5,6 +5,7 @@ import { registerRunCommand } from "./commands/run";
 import { registerConfigCommand } from "./commands/config";
 import { registerEnvCommand } from "./commands/env";
 import { registerProjectsCommand } from "./commands/projects";
+import { registerLogsCommand } from "./commands/logs";
 import { reportError } from "./ui/format";
 import { isTokenExpired, readToken } from "./config";
 import pkg from "../package.json";
@@ -110,6 +111,7 @@ registerRunCommand(program);
 registerConfigCommand(program);
 registerEnvCommand(program);
 registerProjectsCommand(program);
+registerLogsCommand(program);
 
 // When invoked with no arguments at all, print a short status hint. Any
 // unrecognized command is left to commander, which exits non-zero with a
