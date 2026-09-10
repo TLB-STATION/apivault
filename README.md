@@ -71,23 +71,23 @@ Installs into `~/.local/share/apivault` and links `~/.local/bin/apivault` — no
 | :--- | :--- |
 | `apivault login` | Authenticate via browser approval |
 | `apivault logout` | Revoke session and clear stored token |
-| `apivault whoami` | Show the connected user |
-| `apivault link <id>` | Link current directory to an ApiVault project (`.apivault.json`) |
+| `apivault whoami` | Show the connected user and when this device's token expires |
+| `apivault link <id\|slug>` | Link current directory to an ApiVault project (`.apivault.json`) |
 | `apivault unlink` | Remove local project binding (`.apivault.json`) |
 | `apivault keys list` | List all vault keys (masked) |
 | `apivault keys add` | Add a new secret (interactive or flags) |
 | `apivault keys get <id>` | View key details; add `--reveal` to decrypt |
 | `apivault keys update <id>` | Edit a stored key |
 | `apivault keys delete <id>` | Delete a key (`-f` to skip prompt) |
-| `apivault projects list` | List all available projects |
-| `apivault projects use <id>` | Set active project locally (`.apivault.json`, or `--global`) |
+| `apivault projects list` | List all available projects with their IDs and slugs |
+| `apivault projects use <id\|slug>` | Set active project locally (`.apivault.json`, or `--global`) |
 | `apivault projects current` | Display currently active project and its source |
 | `apivault run` | Inject secrets into a child process |
 | `apivault env export` | Write secrets to a `.env` file |
 | `apivault env restore` | Restore `.env` files hidden by `run` |
 | `apivault config list\|get\|set\|delete` | Manage local & global CLI defaults (`-l` / `-g`) |
 
-**Global flags:** `--json` (machine-readable output), `--timeout <seconds>` (browser approval wait, default 300), `-p, --project <id>` (explicit project override).
+**Global flags:** `--json` (machine-readable output), `--timeout <seconds>` (browser approval wait, default 300), `-p, --project <id|slug>` (explicit project override), `-V, --version`, `-h, --help`.
 
 ---
 
@@ -106,23 +106,40 @@ apivault whoami                    # check connection status
 apivault logout                    # revoke this device's token
 ```
 
+### Token expiry
+
+Tokens issued by the approval flow **expire 90 days after they are minted**. `apivault login` prints the expiry date once the connection succeeds, and `apivault whoami` shows it on every run — highlighted as a warning when fewer than 14 days remain:
+
+```bash
+apivault whoami
+# ✔ Signed in as you@example.com
+#   Token expires 12/9/2026.
+
+apivault --json whoami | jq -r .tokenExpiresAt   # ISO date, or null for tokens
+                                                 # saved before expiry tracking
+```
+
+Once a token lapses, commands report the date it expired instead of a bare `Unauthorized`; run `apivault login` to issue a fresh one. Tokens can also be revoked at any time from **Settings → Sessions & Devices** in the web app.
+
 ---
 
 ## Managing Projects & Local Directory Bindings
 
 ```bash
-apivault projects list             # list all available projects
-apivault projects use <id>         # bind current directory to a project (.apivault.json)
-apivault link <id>                 # shortcut to bind current directory
+apivault projects list             # list all available projects (ID and slug)
+apivault projects use <id|slug>    # bind current directory to a project (.apivault.json)
+apivault link <id|slug>            # shortcut to bind current directory
 apivault projects current          # check active project and resolution source
 apivault unlink                    # remove local project binding
 ```
 
+Anywhere a project is named — the `-p/--project` flag, `APIVAULT_PROJECT`, or the `project` config value — you can pass either the project **ID** or its **slug** (the name in your project URL, `apivault.tech/<username>/<slug>`). `apivault projects list` prints both.
+
 For commands that require a project context, the CLI resolves the active project in this order:
-1. `--project <id>` or `-p <id>` flag (available on all commands)
+1. `--project <id|slug>` or `-p <id|slug>` flag (available on all commands)
 2. `APIVAULT_PROJECT` environment variable
 3. Local directory configuration (`.apivault.json`, `.apivaultrc`, `apivault.json`)
-4. Global default project (`apivault projects use <id> --global` or `~/.apivault/config.json`)
+4. Global default project (`apivault projects use <id|slug> --global` or `~/.apivault/config.json`)
 
 
 ---
@@ -160,6 +177,10 @@ Accounts with a **custom vault key** (Settings → Encryption Key) need the vaul
 4. Interactive hidden prompt (fallback)
 
 Accounts using default encryption need no vault key.
+
+#### Attempt limits
+
+Wrong vault keys are throttled server-side: **10 failed attempts per 15 minutes**, counted per user and per source address. Only requests that actually carry a vault key count, and a correct key clears the counter, so normal use never reaches the limit. Once it trips, the API answers `429` with a `Retry-After` header and the CLI reports how long to wait — re-running the same wrong key only extends the wait.
 
 ---
 
@@ -257,6 +278,8 @@ apivault --json keys get <id> --reveal | jq -r .rawKey | clip
 | **Transport** | HTTPS with token-header authentication |
 | **Local storage** | `~/.apivault/token.json` and `config.json` written with `0600` permissions (Unix) |
 | **Process isolation** | Secrets exist only in child-process memory during `apivault run` — nothing written to disk |
+| **Token lifetime** | Device tokens expire 90 days after approval, and can be revoked early from **Settings → Sessions & Devices** |
+| **Throttling** | Wrong vault keys are rate limited server-side (10 per 15 minutes, per user and source address) |
 
 ---
 
