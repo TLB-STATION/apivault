@@ -28,25 +28,52 @@ function ensureDataDir(): void {
 }
 
 /** Stored token payload. */
-interface StoredToken {
+export interface StoredToken {
   apiToken: string;
   email?: string | null;
   name?: string | null;
   createdAt?: string;
+  /**
+   * When the server will stop accepting this token (ISO 8601). Absent for
+   * tokens saved by CLI versions predating server-side expiry, and for
+   * tokens the server itself minted without one.
+   */
+  expiresAt?: string | null;
 }
 
-/** Read the persisted API token, or null if signed out. */
-export function readToken(): string | null {
+/** Read the full persisted token record, or null if signed out. */
+export function readStoredToken(): StoredToken | null {
   try {
     if (!existsSync(TOKEN_PATH)) return null;
     const raw = readFileSync(TOKEN_PATH, "utf8");
     const parsed = JSON.parse(raw) as StoredToken;
-    return typeof parsed.apiToken === "string" && parsed.apiToken
-      ? parsed.apiToken
-      : null;
+    return typeof parsed.apiToken === "string" && parsed.apiToken ? parsed : null;
   } catch {
     return null;
   }
+}
+
+/** Read the persisted API token, or null if signed out. */
+export function readToken(): string | null {
+  return readStoredToken()?.apiToken ?? null;
+}
+
+/**
+ * Parsed expiry of the stored token, or null when it has none (or is
+ * unparseable — treated as "no expiry" rather than as already expired, so a
+ * corrupt field never locks a working token out).
+ */
+export function getTokenExpiry(): Date | null {
+  const stored = readStoredToken();
+  if (!stored?.expiresAt) return null;
+  const parsed = new Date(stored.expiresAt);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/** True when the stored token carries an expiry that has already passed. */
+export function isTokenExpired(): boolean {
+  const expiry = getTokenExpiry();
+  return expiry !== null && expiry.getTime() <= Date.now();
 }
 
 /** Persist the API token (with optional user identity) after a successful login. */
@@ -54,6 +81,7 @@ export function writeToken(token: {
   apiToken: string;
   email?: string | null;
   name?: string | null;
+  expiresAt?: string | null;
 }): void {
   ensureDataDir();
   const payload: StoredToken = { ...token, createdAt: new Date().toISOString() };

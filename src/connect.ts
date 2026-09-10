@@ -1,6 +1,13 @@
 import open from "open";
 import { ApiClient, ApiError } from "./http";
-import { API_BASE_URL, clearToken, readToken, writeToken, type GlobalOptions } from "./config";
+import {
+  API_BASE_URL,
+  clearToken,
+  getTokenExpiry,
+  readToken,
+  writeToken,
+  type GlobalOptions,
+} from "./config";
 import { green, dim, yellow, bold } from "./ui/format";
 
 const POLL_INTERVAL_MS = 1500;
@@ -15,6 +22,8 @@ interface ConnectRequestResponse {
 interface ConnectStatusResponse {
   status: "pending" | "approved" | "denied" | "consumed" | "expired";
   apiToken?: string;
+  /** When the server will stop accepting the minted token (ISO 8601). */
+  expiresAt?: string | null;
   user?: { email?: string | null; name?: string | null };
 }
 
@@ -61,7 +70,12 @@ export async function runLogin(opts: GlobalOptions): Promise<void> {
     });
 
     if (res.status === "approved" && res.apiToken) {
-      writeToken({ apiToken: res.apiToken, email: res.user?.email, name: res.user?.name });
+      writeToken({
+        apiToken: res.apiToken,
+        email: res.user?.email,
+        name: res.user?.name,
+        expiresAt: res.expiresAt ?? null,
+      });
       process.stdout.write("\n");
       process.stdout.write(
         green("✔") +
@@ -69,6 +83,14 @@ export async function runLogin(opts: GlobalOptions): Promise<void> {
           (res.user?.name ? ` ${dim(`(${res.user.name})`)}` : "") +
           "\n",
       );
+      const expiry = res.expiresAt ? new Date(res.expiresAt) : null;
+      if (expiry && !Number.isNaN(expiry.getTime())) {
+        process.stdout.write(
+          dim(
+            `  This device's token expires ${expiry.toLocaleDateString()}. Run \`apivault login\` again to renew it.\n`,
+          ),
+        );
+      }
       return;
     }
 
@@ -135,8 +157,16 @@ export async function runWhoami(opts: GlobalOptions): Promise<void> {
     "/api/cli/me",
   );
 
+  const expiry = getTokenExpiry();
+
   if (opts.json) {
-    process.stdout.write(JSON.stringify({ authenticated: true, user: me }) + "\n");
+    process.stdout.write(
+      JSON.stringify({
+        authenticated: true,
+        user: me,
+        tokenExpiresAt: expiry ? expiry.toISOString() : null,
+      }) + "\n",
+    );
     return;
   }
   process.stdout.write(
@@ -145,6 +175,17 @@ export async function runWhoami(opts: GlobalOptions): Promise<void> {
       (me.name ? ` ${dim(`(${me.name})`)}` : "") +
       "\n",
   );
+  if (expiry) {
+    const daysLeft = Math.ceil((expiry.getTime() - Date.now()) / 86_400_000);
+    const line = `  Token expires ${expiry.toLocaleDateString()}`;
+    // Nudge before the token dies rather than after, when a scripted run
+    // would fail with nothing but a 401.
+    process.stdout.write(
+      daysLeft <= 14
+        ? yellow(`${line} (${daysLeft} day${daysLeft === 1 ? "" : "s"} left) — run \`apivault login\` to renew.\n`)
+        : dim(`${line}.\n`),
+    );
+  }
 }
 
 function sleep(ms: number): Promise<void> {

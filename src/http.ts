@@ -1,4 +1,4 @@
-import { API_BASE_URL, readToken } from "./config";
+import { API_BASE_URL, getTokenExpiry, readToken } from "./config";
 import pkg from "../package.json";
 
 /** Error wrapper carrying the HTTP status, parsed body, and machine code. */
@@ -7,11 +7,19 @@ export class ApiError extends Error {
   body: unknown;
   /** Stable machine code from the server body (e.g. "VAULT_KEY_REQUIRED"). */
   code?: string;
-  constructor(message: string, status: number, body: unknown) {
+  /** Seconds to wait, from the `Retry-After` header on a throttled response. */
+  retryAfterSeconds?: number;
+  constructor(
+    message: string,
+    status: number,
+    body: unknown,
+    retryAfterSeconds?: number,
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.body = body;
+    this.retryAfterSeconds = retryAfterSeconds;
     if (
       body &&
       typeof body === "object" &&
@@ -20,6 +28,14 @@ export class ApiError extends Error {
       this.code = (body as { code: string }).code;
     }
   }
+}
+
+/** Render a `Retry-After` delay as "in 2m 30s" / "in 45s". */
+function formatRetryAfter(seconds: number): string {
+  if (seconds < 60) return `in ${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest > 0 ? `in ${minutes}m ${rest}s` : `in ${minutes}m`;
 }
 
 export interface RequestOpts {
@@ -85,7 +101,13 @@ export class ApiClient {
 
     if (!res.ok) {
       const parsed = await this.safeJson(res);
-      throw new ApiError(this.extractMessage(parsed, res.status), res.status, parsed);
+      const retryAfter = this.readRetryAfter(res);
+      throw new ApiError(
+        this.extractMessage(parsed, res.status, retryAfter),
+        res.status,
+        parsed,
+        retryAfter,
+      );
     }
 
     if (res.status === 204) return undefined as unknown as T;
@@ -111,15 +133,44 @@ export class ApiClient {
     }
   }
 
-  private extractMessage(parsed: unknown, status: number): string {
-    if (
+  /** `Retry-After` in seconds, when the server sent a numeric one. */
+  private readRetryAfter(res: Response): number | undefined {
+    const raw = res.headers.get("retry-after");
+    if (!raw) return undefined;
+    const seconds = Number.parseInt(raw, 10);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+  }
+
+  private extractMessage(
+    parsed: unknown,
+    status: number,
+    retryAfterSeconds?: number,
+  ): string {
+    const serverError =
       parsed &&
       typeof parsed === "object" &&
       typeof (parsed as { error?: unknown }).error === "string"
-    ) {
-      return (parsed as { error: string }).error;
+        ? (parsed as { error: string }).error
+        : undefined;
+
+    // The server answers every unusable token with a bare "Unauthorized", so
+    // say what actually needs doing. CLI tokens expire 90 days after approval.
+    if (status === 401 && (!serverError || serverError === "Unauthorized")) {
+      const expiry = getTokenExpiry();
+      if (expiry && expiry.getTime() <= Date.now()) {
+        return `This device's token expired on ${expiry.toLocaleDateString()}. Run \`apivault login\` to reconnect.`;
+      }
+      return "Not signed in — this device's token is missing, expired, or was revoked. Run `apivault login`.";
     }
-    if (status === 401) return "You are not signed in. Run `apivault login`.";
+
+    if (status === 429 && retryAfterSeconds) {
+      const wait = formatRetryAfter(retryAfterSeconds);
+      return serverError
+        ? `${serverError} Try again ${wait}.`
+        : `Too many requests. Try again ${wait}.`;
+    }
+
+    if (serverError) return serverError;
     if (status === 404) return "Not found.";
     return `Request failed (HTTP ${status}).`;
   }

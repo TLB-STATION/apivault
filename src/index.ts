@@ -6,7 +6,7 @@ import { registerConfigCommand } from "./commands/config";
 import { registerEnvCommand } from "./commands/env";
 import { registerProjectsCommand } from "./commands/projects";
 import { reportError } from "./ui/format";
-import { readToken } from "./config";
+import { isTokenExpired, readToken } from "./config";
 import pkg from "../package.json";
 
 const program = new Command();
@@ -117,10 +117,13 @@ registerProjectsCommand(program);
 const rawArgs = process.argv.slice(2);
 if (rawArgs.length === 0) {
   const signedIn = Boolean(readToken());
+  const status = !signedIn
+    ? "Not signed in — run `apivault login`.\n"
+    : isTokenExpired()
+      ? "This device's token has expired — run `apivault login` to reconnect.\n"
+      : "Signed in.\n";
   process.stdout.write(
-    "ApiVault CLI\n\n" +
-      (signedIn ? "Signed in.\n" : "Not signed in — run `apivault login`.\n") +
-      "Run `apivault --help` to see all commands.\n",
+    "ApiVault CLI\n\n" + status + "Run `apivault --help` to see all commands.\n",
   );
   process.exit(0);
 }

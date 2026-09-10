@@ -29,15 +29,26 @@ export function cyan(s: string): string {
   return useColor() ? pc.cyan(s) : s;
 }
 
-/** Mask a raw key the same way the web app does (see keys/route.ts maskKey). */
+/**
+ * Mask a raw key by length, mirroring the web app's `maskKey`
+ * (`src/lib/vault.ts` in the ApiVault repo) so a locally masked value and a
+ * server-sent `masked_preview` never render differently. Keep the two in sync.
+ */
 export function maskKey(rawKey: string): string {
   if (!rawKey) return "••••••••••••••••";
-  if (rawKey.length <= 10) {
-    return rawKey.slice(0, 3) + "••••••••••••";
+  const len = rawKey.length;
+  if (len <= 4) {
+    return "•".repeat(len);
+  }
+  if (len <= 7) {
+    return `${rawKey.slice(0, 1)}${"•".repeat(len - 2)}${rawKey.slice(-1)}`;
+  }
+  if (len <= 12) {
+    return `${rawKey.slice(0, 3)}${"•".repeat(len - 5)}${rawKey.slice(-2)}`;
   }
   const prefix = rawKey.slice(0, 7);
   const suffix = rawKey.slice(-4);
-  return `${prefix}••••••••••••${suffix}`;
+  return `${prefix}${"•".repeat(len - 11)}${suffix}`;
 }
 
 /** Format an ISO date string as a short local stamp; blank if unset. */
