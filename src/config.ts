@@ -53,8 +53,26 @@ export function readStoredToken(): StoredToken | null {
   }
 }
 
-/** Read the persisted API token, or null if signed out. */
+/**
+ * True when this process is authenticating as a machine rather than a person.
+ *
+ * `APIVAULT_TOKEN` is how a service token reaches the CLI in CI, where there is
+ * no browser to approve a login and no `~/.apivault/token.json` to read.
+ */
+export function isServiceTokenMode(): boolean {
+  return Boolean(process.env.APIVAULT_TOKEN?.trim());
+}
+
+/**
+ * The API token this process should use.
+ *
+ * `APIVAULT_TOKEN` wins over the stored device token: in CI there is nothing
+ * stored, and on a developer's machine where both exist the environment
+ * variable is the deliberate, explicit choice.
+ */
 export function readToken(): string | null {
+  const fromEnv = process.env.APIVAULT_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
   return readStoredToken()?.apiToken ?? null;
 }
 
@@ -64,6 +82,10 @@ export function readToken(): string | null {
  * corrupt field never locks a working token out).
  */
 export function getTokenExpiry(): Date | null {
+  // A service token's expiry lives on the server, not in a local file. Reading
+  // a stale ~/.apivault/token.json here would report some other credential's
+  // expiry — or none — for the token actually in use.
+  if (isServiceTokenMode()) return null;
   const stored = readStoredToken();
   if (!stored?.expiresAt) return null;
   const parsed = new Date(stored.expiresAt);

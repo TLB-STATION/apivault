@@ -4,6 +4,7 @@ import {
   API_BASE_URL,
   clearToken,
   getTokenExpiry,
+  isServiceTokenMode,
   readToken,
   writeToken,
   type GlobalOptions,
@@ -35,6 +36,15 @@ interface ConnectStatusResponse {
  * approval, the returned API token is persisted for all later commands.
  */
 export async function runLogin(opts: GlobalOptions): Promise<void> {
+  if (isServiceTokenMode()) {
+    throw new ApiError(
+      "APIVAULT_TOKEN is set, so this shell already authenticates as a service token. " +
+        "Unset it to sign in as yourself.",
+      400,
+      undefined,
+    );
+  }
+
   const client = new ApiClient(API_BASE_URL);
 
   // 1. Start a connect request.
@@ -125,6 +135,18 @@ export async function runLogin(opts: GlobalOptions): Promise<void> {
 
 /** `apivault logout` — revoke the token server-side and clear it locally. */
 export async function runLogout(): Promise<void> {
+  if (isServiceTokenMode()) {
+    // Without this guard, `logout` would DELETE /api/cli/token using a service
+    // token's credentials — a confusing no-op at best — and then clear a device
+    // token the caller never asked to sign out.
+    throw new ApiError(
+      "APIVAULT_TOKEN is set. Service tokens are revoked from the project's Tokens page, " +
+        "not with `apivault logout`. Unset APIVAULT_TOKEN to sign this device out.",
+      400,
+      undefined,
+    );
+  }
+
   const token = readToken();
   if (!token) {
     process.stdout.write(dim("Not signed in.\n"));
@@ -153,9 +175,31 @@ export async function runWhoami(opts: GlobalOptions): Promise<void> {
     return;
   }
 
-  const me = await client.request<{ email?: string | null; name?: string | null }>(
-    "/api/cli/me",
-  );
+  const me = await client.request<{
+    kind?: "user" | "service";
+    email?: string | null;
+    name?: string | null;
+    projectId?: string;
+    scopes?: string[];
+    environment?: string | null;
+  }>("/api/cli/me");
+
+  // A machine identity has no email to print, and its expiry lives server-side.
+  if (me.kind === "service") {
+    if (opts.json) {
+      process.stdout.write(JSON.stringify({ authenticated: true, ...me }) + "\n");
+      return;
+    }
+    process.stdout.write(
+      green("✔") + ` Authenticated as service token ${bold(me.name ?? "?")}\n`,
+    );
+    process.stdout.write(dim(`  Project:      ${me.projectId ?? "?"}\n`));
+    process.stdout.write(dim(`  Scopes:       ${(me.scopes ?? []).join(", ") || "none"}\n`));
+    if (me.environment) {
+      process.stdout.write(dim(`  Environment:  ${me.environment} only\n`));
+    }
+    return;
+  }
 
   const expiry = getTokenExpiry();
 
