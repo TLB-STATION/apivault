@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { ApiError, client } from "../http";
-import { type GlobalOptions, getActiveProjectId } from "../config";
+import { type GlobalOptions, getActiveProjectId, isServiceTokenMode } from "../config";
 import {
   type LogEntryDTO,
   renderLogsTable,
@@ -42,6 +42,18 @@ export interface LogOpts extends GlobalOptions {
 }
 
 async function resolveProjectId(projectFlag?: string): Promise<string> {
+  // The audit trail is a human oversight surface: a service token is one of the
+  // things it exists to watch, so it cannot read it. Guarding here covers every
+  // `logs` subcommand, each of which resolves a project through this function.
+  if (isServiceTokenMode()) {
+    throw new ApiError(
+      "`logs` is not available to service tokens — the audit trail records machine access rather than " +
+        "exposing it. View it on the project's Logs page, or run `logs` as a signed-in user.",
+      400,
+      undefined,
+    );
+  }
+
   const active = getActiveProjectId(projectFlag);
   if (active) return active;
 

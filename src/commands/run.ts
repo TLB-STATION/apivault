@@ -6,6 +6,7 @@ import { client } from "../http";
 import { revealKey, type ApiKeyDTO } from "./keys";
 import { getConfigValue, getActiveProjectId, type GlobalOptions } from "../config";
 import { buildRunEnv, hideDotenvFiles, restoreDotenvFiles } from "../run-env";
+import { resolveEnvironment } from "../service-identity";
 import { green, dim, yellow, reportError } from "../ui/format";
 
 interface RunOpts extends GlobalOptions {
@@ -41,13 +42,8 @@ function exitCodeForSignal(signal: string): number {
  * the only source of configuration values.
  */
 async function runCommand(opts: RunOpts, commandAndArgs: string[]): Promise<void> {
-  // --- Resolve environment: --env flag → config run.env → error.
-  const env = (opts.env ?? getConfigValue("run.env"))?.trim();
-  if (!env) {
-    throw new Error(
-      "No environment specified. Pass --env <env>, or set a default with `apivault config set run.env <env>`.",
-    );
-  }
+  // --- Resolve environment: --env flag → service token pin → config run.env.
+  const env = await resolveEnvironment(opts.env);
 
   // --- Resolve command: explicit `--` args → config run.command → error.
   let command = commandAndArgs;

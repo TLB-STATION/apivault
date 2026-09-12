@@ -1,6 +1,7 @@
 import { Command } from "commander";
-import { ApiClient } from "../http";
+import { ApiClient, ApiError } from "../http";
 import {
+  isServiceTokenMode,
   setConfigValue,
   getLocalProject,
   readLocalConfig,
@@ -28,6 +29,17 @@ interface ProjectUseOptions {
 
 /** apivault projects list */
 async function listProjects(json: boolean): Promise<void> {
+  // Account-wide, so a project-scoped service token can never read it. Without
+  // this guard the server's bare 401 is indistinguishable from a bad token.
+  if (isServiceTokenMode()) {
+    throw new ApiError(
+      "`projects list` is not available to service tokens — it spans every project on the account, " +
+        "while a service token belongs to exactly one. Run `apivault whoami` to see which.",
+      400,
+      undefined,
+    );
+  }
+
   const client = new ApiClient();
   const projects = await client.request<ProjectItem[]>("/api/projects", {
     method: "GET",

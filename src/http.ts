@@ -1,4 +1,4 @@
-import { API_BASE_URL, getTokenExpiry, readToken } from "./config";
+import { API_BASE_URL, getTokenExpiry, isServiceTokenMode, readToken } from "./config";
 import pkg from "../package.json";
 
 /** Error wrapper carrying the HTTP status, parsed body, and machine code. */
@@ -156,6 +156,17 @@ export class ApiClient {
     // The server answers every unusable token with a bare "Unauthorized", so
     // say what actually needs doing. CLI tokens expire 90 days after approval.
     if (status === 401 && (!serverError || serverError === "Unauthorized")) {
+      // `apivault login` refuses to run while APIVAULT_TOKEN is set, so telling
+      // a pipeline to run it would send the operator into a dead end. A revoked
+      // or expired service token is named by the server; a bare 401 here means
+      // the value was never recognised at all.
+      if (isServiceTokenMode()) {
+        return (
+          "APIVAULT_TOKEN was not recognised. Check the value is the full `av_live_...` token, " +
+          "that it has not been deleted, and that it belongs to this ApiVault instance. " +
+          "Service tokens are managed on the project's Tokens page."
+        );
+      }
       const expiry = getTokenExpiry();
       if (expiry && expiry.getTime() <= Date.now()) {
         return `This device's token expired on ${expiry.toLocaleDateString()}. Run \`apivault login\` to reconnect.`;

@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { resolve } from "node:path";
 import { client } from "../http";
-import { getConfigValue, getActiveProjectId, type GlobalOptions } from "../config";
+import { getActiveProjectId, type GlobalOptions } from "../config";
 import { revealKey, type ApiKeyDTO } from "./keys";
 import {
   buildEnvContent,
@@ -10,6 +10,7 @@ import {
   writeEnvFile,
 } from "../env-file";
 import { restoreDotenvFiles } from "../run-env";
+import { resolveEnvironment } from "../service-identity";
 import { printJson, printSuccess, dim, yellow, reportError } from "../ui/format";
 
 interface ExportOpts extends GlobalOptions {
@@ -28,12 +29,7 @@ interface RestoreOpts {
  * local .env file (merge by default; --force replaces the file).
  */
 async function exportEnv(opts: ExportOpts, json: boolean): Promise<void> {
-  const env = (opts.env ?? getConfigValue("run.env"))?.trim();
-  if (!env) {
-    throw new Error(
-      "No environment specified. Pass --env <env>, or set a default with `apivault config set run.env <env>`.",
-    );
-  }
+  const env = await resolveEnvironment(opts.env);
 
   const projectId = getActiveProjectId(opts.project);
   const output = (opts.output ?? ".env").trim() || ".env";
