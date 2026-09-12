@@ -181,7 +181,15 @@ apivault keys add --name STRIPE_SECRET --key "$NEW_VALUE"   # --environment come
 
 `--name` and `--key` are always required. `--environment` falls back to the token's pin, and is required when the token is unpinned — there is no safe default, since guessing would put a secret in the wrong environment. `--service` defaults to `Custom` and `--notes` to empty.
 
-`keys update` is interactive for every field and has no flag equivalent, so it cannot run headlessly. To replace a value in a pipeline, `keys delete` then `keys add`.
+`keys delete` needs `-f`. Deleting is irreversible, so with no terminal to confirm on the CLI refuses rather than treating an absent human as a yes:
+
+```bash
+apivault keys delete <id> -f
+```
+
+`keys update` is interactive for every field and has no flag equivalent, so it cannot run headlessly. To replace a value in a pipeline, `keys delete -f` then `keys add`.
+
+On a project with a **custom vault key**, pass `--vault-key` or set `APIVAULT_KEY`. Any command that decrypts will otherwise stop and say it has no terminal to ask on.
 
 ### Environment pinning
 

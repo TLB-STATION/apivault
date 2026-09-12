@@ -128,6 +128,14 @@ async function withVaultKey<T>(
   } catch (err) {
     if (err instanceof ApiError && err.code === "VAULT_KEY_REQUIRED") {
       if (vaultKey) throw new ApiError("That vault key is incorrect.", 403, undefined);
+      if (!canPrompt()) {
+        throw new ApiError(
+          "This project uses a custom vault key, and there is no terminal to ask for it. " +
+            "Pass --vault-key or set APIVAULT_KEY.",
+          400,
+          undefined,
+        );
+      }
       const customVaultKey = await promptVaultKey();
       return fn(headersFor(customVaultKey));
     }
@@ -353,6 +361,17 @@ async function deleteKey(id: string, opts: KeyOpts): Promise<void> {
     });
 
   if (!opts.force && !opts.json) {
+    // Deleting is irreversible, so an unattended shell must say so explicitly.
+    // Treating "nobody is here to confirm" as a yes would be the wrong default
+    // for the one command that cannot be undone.
+    if (!canPrompt()) {
+      throw new ApiError(
+        `Refusing to delete "${existing.name}" without confirmation. ` +
+          "There is no terminal to confirm on — pass -f to delete unattended.",
+        400,
+        undefined,
+      );
+    }
     const ok = await confirm({
       message: `Delete "${existing.name}" (${dim(id)})? This cannot be undone.`,
       default: false,
