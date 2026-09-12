@@ -195,9 +195,14 @@ export async function runWhoami(opts: GlobalOptions): Promise<void> {
     );
     process.stdout.write(dim(`  Project:      ${me.projectId ?? "?"}\n`));
     process.stdout.write(dim(`  Scopes:       ${(me.scopes ?? []).join(", ") || "none"}\n`));
-    if (me.environment) {
-      process.stdout.write(dim(`  Environment:  ${me.environment} only\n`));
-    }
+    // Always print the line. Omitting it for an unpinned token reads as "not
+    // known" rather than "not restricted", which is the wrong impression to
+    // leave about a credential's reach.
+    process.stdout.write(
+      dim(
+        `  Environment:  ${me.environment ? `${me.environment} only` : "All environments"}\n`,
+      ),
+    );
     return;
   }
 
