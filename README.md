@@ -71,7 +71,7 @@ Installs into `~/.local/share/apivault` and links `~/.local/bin/apivault` — no
 | :--- | :--- |
 | `apivault login` | Authenticate via browser approval |
 | `apivault logout` | Revoke session and clear stored token |
-| `apivault whoami` | Show the connected user and when this device's token expires |
+| `apivault whoami` | Show the connected user (or service token) and when this device's token expires |
 | `apivault link <id\|slug>` | Link current directory to an ApiVault project (`.apivault.json`) |
 | `apivault unlink` | Remove local project binding (`.apivault.json`) |
 | `apivault keys list` | List all vault keys (masked) |
@@ -91,6 +91,8 @@ Installs into `~/.local/share/apivault` and links `~/.local/bin/apivault` — no
 | `apivault logs get <id>` | Inspect one log entry in full |
 
 **Global flags:** `--json` (machine-readable output), `--timeout <seconds>` (browser approval wait, default 300), `-p, --project <id|slug>` (explicit project override), `-V, --version`, `-h, --help`.
+
+**Environment variables:** `APIVAULT_TOKEN` (service token for headless/CI use — see [Headless Authentication](#headless-authentication-cicd)), `APIVAULT_PROJECT` (default project).
 
 ---
 
@@ -123,6 +125,88 @@ apivault --json whoami | jq -r .tokenExpiresAt   # ISO date, or null for tokens
 ```
 
 Once a token lapses, commands report the date it expired instead of a bare `Unauthorized`; run `apivault login` to issue a fresh one. Tokens can also be revoked at any time from **Settings → Sessions & Devices** in the web app.
+
+---
+
+## Headless Authentication (CI/CD)
+
+`apivault login` needs a browser, which a build runner does not have. For pipelines, containers and scheduled jobs, create a **service token** instead — a project-scoped machine credential that carries its own permissions and never represents a person.
+
+Create one in the web app under **your project → Service Tokens**. The value is shown **once**, starts with `av_live_`, and is stored only as a hash — if you lose it, issue a new one.
+
+Set it as `APIVAULT_TOKEN` and every command below works with no login, no `~/.apivault/`, and no project flag:
+
+```bash
+export APIVAULT_TOKEN="av_live_..."
+apivault whoami
+apivault run -- npm start
+```
+
+`APIVAULT_TOKEN` takes precedence over a stored device token, so it also works on a developer machine that is already signed in.
+
+### What a service token can do
+
+| Command | Available | Required scope |
+| :--- | :--- | :--- |
+| `keys list`, `keys get` | ✅ | `keys:read` |
+| `keys get --reveal` | ✅ | `keys:reveal` |
+| `keys add`, `keys update`, `keys delete` | ✅ | `keys:write` |
+| `env export` | ✅ | `keys:read` + `keys:reveal` |
+| `run -- <command>` | ✅ | `keys:read` + `keys:reveal` |
+| `whoami` | ✅ | any |
+| `config`, `link`, `unlink` | ✅ | local only |
+| `projects list` | ❌ | account-wide, not project-scoped |
+| `logs`, `logs tail`, `logs get` | ❌ | audit surface — read it in the web app |
+| `login`, `logout` | ❌ | refused while `APIVAULT_TOKEN` is set |
+
+`whoami` reports the machine identity rather than a person, which is the quickest way to confirm a runner picked up the credential you meant:
+
+```bash
+apivault whoami
+# ✔ Authenticated as service token deploy-bot
+#   Project:      acme-api
+#   Scopes:       keys:read, keys:reveal
+#   Environment:  Production only
+```
+
+### Environment pinning
+
+A token can be pinned to one environment. When it is, `run` and `env export` use that environment automatically — you do **not** need `--env`, and there is nothing to configure in the container:
+
+```bash
+apivault run -- npm start        # loads the token's pinned environment
+```
+
+Passing `--env` explicitly still wins, so a token pinned to `Production` that is asked for `Staging` fails loudly rather than quietly reading the wrong secrets. An unpinned token has no default and requires `--env`.
+
+### GitHub Actions
+
+```yaml
+- name: Build with vault secrets
+  env:
+    APIVAULT_TOKEN: ${{ secrets.APIVAULT_TOKEN }}
+  run: |
+    npx apivault run -- npm run build
+```
+
+### Docker
+
+```dockerfile
+RUN npm install -g apivault
+CMD ["apivault", "run", "--", "node", "server.js"]
+```
+
+```bash
+docker run -e APIVAULT_TOKEN="av_live_..." myimage
+```
+
+### Operational notes
+
+- **Least privilege.** Grant only the scopes the job needs. A build that reads secrets never needs `keys:write`.
+- **Every token expires.** Expiry is mandatory; the web app warns as the date approaches. An expired or revoked token reports exactly that, so a red build tells you which it was.
+- **IP allowlisting** is available for runners with stable egress addresses. It depends on the proxy headers your deployment trusts — see the [CI/CD guide](https://apivault.tech/docs/ci-cd) before relying on it as a control.
+- **Machine exports are announced.** `env export` and the bulk export endpoint notify the project's owners and admins, naming the token.
+- **Revocation is immediate** and lives on the project's Service Tokens page — `apivault logout` does not apply to service tokens and will refuse to run.
 
 ---
 
