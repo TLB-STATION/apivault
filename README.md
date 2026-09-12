@@ -150,7 +150,9 @@ apivault run -- npm start
 | :--- | :--- | :--- |
 | `keys list`, `keys get` | ✅ | `keys:read` |
 | `keys get --reveal` | ✅ | `keys:reveal` |
-| `keys add`, `keys update`, `keys delete` | ✅ | `keys:write` |
+| `keys add` | ✅ — flags only, see below | `keys:write` |
+| `keys delete <id> -f` | ✅ | `keys:write` |
+| `keys update` | ❌ | interactive; needs a terminal |
 | `env export` | ✅ | `keys:read` + `keys:reveal` |
 | `run -- <command>` | ✅ | `keys:read` + `keys:reveal` |
 | `whoami` | ✅ | any |
@@ -168,6 +170,18 @@ apivault whoami
 #   Scopes:       keys:read, keys:reveal
 #   Environment:  Production only
 ```
+
+### Writing keys from a pipeline
+
+With no terminal to prompt on, `keys add` takes every value from flags. A missing one is named as an error instead of hanging the step:
+
+```bash
+apivault keys add --name STRIPE_SECRET --key "$NEW_VALUE"   # --environment comes from the pin
+```
+
+`--name` and `--key` are always required. `--environment` falls back to the token's pin, and is required when the token is unpinned — there is no safe default, since guessing would put a secret in the wrong environment. `--service` defaults to `Custom` and `--notes` to empty.
+
+`keys update` is interactive for every field and has no flag equivalent, so it cannot run headlessly. To replace a value in a pipeline, `keys delete` then `keys add`.
 
 ### Environment pinning
 

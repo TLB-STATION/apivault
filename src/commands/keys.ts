@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { input, password, confirm } from "@inquirer/prompts";
 import { ApiError, client } from "../http";
 import { type GlobalOptions, getConfigValue, getActiveProjectId } from "../config";
+import { getServiceIdentity } from "../service-identity";
 import {
   renderKeysTable,
   renderKeyDetail,
@@ -166,38 +167,76 @@ async function revealKeyDetails(
   return decrypted as ApiKeyDTO & { rawKey: string };
 }
 
+/** True when a person is actually there to answer a prompt. */
+function canPrompt(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+/**
+ * A value that must come from a flag when nobody can answer a prompt.
+ *
+ * A build runner has no terminal, so asking would hang until the step is
+ * killed. Naming the missing flag turns that into an error the log explains.
+ */
+async function flagOrPrompt(
+  value: string | undefined,
+  flag: string,
+  ask: () => Promise<string>,
+): Promise<string> {
+  const given = value?.trim();
+  if (given) return given;
+  if (!canPrompt()) {
+    throw new ApiError(
+      `${flag} is required when running without a terminal (no TTY to prompt on).`,
+      400,
+      undefined,
+    );
+  }
+  return (await ask()).trim();
+}
+
 /** apivault keys add — interactive, or fully via flags for scripting. */
 async function addKey(opts: KeyOpts & AddKeyFields): Promise<void> {
   const c = client;
   const projectId = getActiveProjectId(opts.project);
 
-  const name = (
-    opts.name?.trim() ||
-    (await input({
+  const name = await flagOrPrompt(opts.name, "--name", () =>
+    input({
       message: "Key name:",
       validate: (v) => (v.trim() ? true : "Name is required."),
-    }))
-  ).trim();
+    }),
+  );
   const service = (
     opts.service?.trim() ||
-    (await input({ message: "Service:", default: "Custom" }))
+    (canPrompt() ? await input({ message: "Service:", default: "Custom" }) : "Custom")
   ).trim();
+
+  // A pinned service token can only write into its own environment, so use it
+  // rather than making every pipeline repeat --environment. Without a pin and
+  // without a terminal there is no safe default: guessing "Production" here
+  // could put a secret in the wrong environment, so require the flag instead.
+  const pinnedEnvironment = (await getServiceIdentity())?.environment ?? undefined;
   const environment = (
     opts.environment?.trim() ||
-    (await input({ message: "Environment:", default: "Production" }))
+    pinnedEnvironment ||
+    (await flagOrPrompt(undefined, "--environment", () =>
+      input({ message: "Environment:", default: "Production" }),
+    ))
   ).trim();
-  const keyValue = (
-    opts.key?.trim() ||
-    (await password({
+
+  const keyValue = await flagOrPrompt(opts.key, "--key", () =>
+    password({
       message: "API key value:",
       mask: "*",
       validate: (v) => (v.trim() ? true : "Key value is required."),
-    }))
-  ).trim();
+    }),
+  );
   const notes =
     opts.notes !== undefined
       ? opts.notes.trim()
-      : (await input({ message: "Notes (optional):", default: "" })).trim();
+      : canPrompt()
+        ? (await input({ message: "Notes (optional):", default: "" })).trim()
+        : "";
 
   const created = await withVaultKey(opts.vaultKey, (headers) =>
     c.request<ApiKeyDTO>("/api/keys", {
@@ -223,6 +262,18 @@ async function addKey(opts: KeyOpts & AddKeyFields): Promise<void> {
 
 /** apivault keys update <id> (interactive) */
 async function updateKey(id: string, opts: KeyOpts): Promise<void> {
+  // Every field is prompted, so there is nothing to fall back to without a
+  // terminal. Say so rather than letting the prompt library abort on a closed
+  // stdin, which reports as "User force closed the prompt".
+  if (!canPrompt()) {
+    throw new ApiError(
+      "`keys update` is interactive and needs a terminal. In a pipeline, replace the value with " +
+        "`keys delete` followed by `keys add --name ... --key ...`.",
+      400,
+      undefined,
+    );
+  }
+
   const c = client;
   const projectId = getActiveProjectId(opts.project);
 
