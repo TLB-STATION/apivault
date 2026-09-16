@@ -398,8 +398,8 @@ apivault logs get <log-id>
 | `--page <n>` | Page through results (default 1) |
 | `-f, --follow` | Stream new entries in real time |
 | `--status <s>` | `success`, `error`, or an HTTP code such as `200` / `404`. Repeatable |
-| `--source <s>` | `cli`, `mcp`, `web`, or `api` |
-| `--method <m>` | `GET`, `POST`, `PUT`, `DELETE` |
+| `--source <s>` | `cli`, `mcp`, `web`, `api`, `service` (service tokens), or `integration` (automatic Vercel and Supabase work) |
+| `--method <m>` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
 | `--event-type <t>` | e.g. `KEY_REVEALED`, `KEY_ROTATED`, `KEY_CREATED` |
 | `--user <userId>` | Restrict to one actor |
 | `--key <idOrName>` | Entries touching one stored key |
